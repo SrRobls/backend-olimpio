@@ -2,8 +2,10 @@ package functions
 
 import (
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	"olimpo-vicedecanatura/models"
+	"strings"
 )
 
 // CompareAcademicHistoryWithStudyPlan compara la historia académica de un estudiante con un plan de estudio
@@ -48,10 +50,17 @@ func CompareAcademicHistoryWithStudyPlan(db *gorm.DB, academicHistory models.Aca
 	// 4. Procesar la historia académica
 	approvedSubjects := make(map[string]bool) // códigos de materias aprobadas
 	for _, historySubject := range academicHistory.Subjects {
-		if historySubject.Status == "APROBADA" {
-			approvedSubjects[historySubject.Code] = true
-		}
+		// Asumir que todas las materias en la historia académica están aprobadas
+		// ya que están en la historia académica del estudiante
+		approvedSubjects[strings.TrimSpace(historySubject.Code)] = true
 	}
+	fmt.Printf("[DEBUG] Materias aprobadas en historia académica: %+v\n", approvedSubjects)
+	fmt.Printf("[DEBUG] Materias del plan: ")
+	for _, planSubject := range studyPlan.Subjects {
+		fmt.Printf("%s, ", planSubject.Code)
+	}
+	fmt.Println()
+	fmt.Printf("[DEBUG] Equivalencias cargadas: %+v\n", equivalenceMap)
 
 	// 5. Determinar qué materias del plan están aprobadas (directa o por equivalencia)
 	var equivalentSubjects []models.SubjectResult
