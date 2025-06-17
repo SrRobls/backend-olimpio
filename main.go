@@ -11,8 +11,8 @@ import (
 	"olimpo-vicedecanatura/models"
 	"olimpo-vicedecanatura/functions"
 	"strings"
-	"errors"
 	"regexp"
+	"fmt"
 )
 
 
@@ -334,105 +334,99 @@ type ParsedSubject struct {
 	Semester    string  `json:"semester"`
 }
 
-// parseAcademicHistoryText extrae las materias de la historia académica en texto
-func parseAcademicHistoryText(text string) ([]ParsedSubject, error) {
-	var subjects []ParsedSubject
+// Parser alternativo más flexible para historia académica
+func parseAcademicHistoryTextFlexible(text string) ([]ParsedSubject, error) {
+	fmt.Println("[DEBUG] Usando parser flexible")
+	fmt.Println("=== INICIO DEL TEXTO ===")
+	fmt.Println(text)
+	fmt.Println("=== FIN DEL TEXTO ===")
+	
 	lines := strings.Split(text, "\n")
-	for _, line := range lines {
+	var subjects []ParsedSubject
+	
+	// Buscar patrones de materias en el texto
+	// Patrón 1: Código entre paréntesis al inicio de línea
+	codePattern := regexp.MustCompile(`^([^(]+)\s*\(([^)]+)\)`)
+	// Patrón 2: Línea que contiene créditos (número)
+	creditsPattern := regexp.MustCompile(`^\s*(\d+)\s*$`)
+	// Patrón 3: Línea que contiene calificación (número decimal)
+	gradePattern := regexp.MustCompile(`^\s*(\d+\.?\d*)\s*$`)
+	
+	var currentSubject *ParsedSubject
+	var lineCount int
+	
+	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if strings.Contains(line, "(") && strings.Contains(line, ")") {
-			subject, err := parseSubjectLineUltraTolerant(line)
-			if err == nil {
-				subjects = append(subjects, subject)
+		
+		fmt.Printf("[DEBUG] Procesando línea %d: '%s'\n", i+1, line)
+		
+		// Si encontramos un código de materia, empezar nueva materia
+		if match := codePattern.FindStringSubmatch(line); match != nil {
+			if currentSubject != nil {
+				// Guardar la materia anterior si existe
+				subjects = append(subjects, *currentSubject)
+			}
+			
+			name := strings.TrimSpace(match[1])
+			code := strings.TrimSpace(match[2])
+			
+			currentSubject = &ParsedSubject{
+				Code:     code,
+				Name:     name,
+				Status:   "APROBADA",
+				Credits:  0,
+				Grade:    0.0,
+				Type:     "",
+				Semester: "",
+			}
+			lineCount = 0
+			fmt.Printf("[DEBUG] Nueva materia encontrada: %s (%s)\n", name, code)
+			continue
+		}
+		
+		// Si tenemos una materia en progreso, procesar las líneas siguientes
+		if currentSubject != nil {
+			lineCount++
+			
+			switch lineCount {
+			case 1: // Créditos
+				if match := creditsPattern.FindStringSubmatch(line); match != nil {
+					if credits, err := strconv.Atoi(match[1]); err == nil {
+						currentSubject.Credits = credits
+						fmt.Printf("[DEBUG] Créditos: %d\n", credits)
+					}
+				}
+			case 2: // Tipo
+				currentSubject.Type = line
+				fmt.Printf("[DEBUG] Tipo: %s\n", line)
+			case 3: // Período
+				currentSubject.Semester = line
+				fmt.Printf("[DEBUG] Período: %s\n", line)
+			case 4: // Calificación
+				if match := gradePattern.FindStringSubmatch(line); match != nil {
+					if grade, err := strconv.ParseFloat(match[1], 64); err == nil {
+						currentSubject.Grade = grade
+						fmt.Printf("[DEBUG] Calificación: %.1f\n", grade)
+					}
+				}
+				// Después de procesar la calificación, guardar la materia
+				subjects = append(subjects, *currentSubject)
+				currentSubject = nil
+				lineCount = 0
 			}
 		}
 	}
+	
+	// Guardar la última materia si existe
+	if currentSubject != nil {
+		subjects = append(subjects, *currentSubject)
+	}
+	
+	fmt.Printf("[DEBUG] Total materias parseadas (flexible): %d\n", len(subjects))
 	return subjects, nil
-}
-
-// Versión ultra tolerante del parser de materias
-func parseSubjectLineUltraTolerant(line string) (ParsedSubject, error) {
-	codeStart := strings.Index(line, "(")
-	codeEnd := strings.Index(line, ")")
-	if codeStart == -1 || codeEnd == -1 || codeEnd <= codeStart {
-		return ParsedSubject{}, errors.New("código no encontrado")
-	}
-	code := line[codeStart+1 : codeEnd]
-	name := strings.TrimSpace(line[:codeStart])
-	remaining := strings.TrimSpace(line[codeEnd+1:])
-	parts := strings.Fields(remaining)
-	if len(parts) < 2 {
-		return ParsedSubject{}, errors.New("información insuficiente")
-	}
-	reNum := regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
-	if !reNum.MatchString(parts[0]) {
-		return ParsedSubject{}, errors.New("créditos no es un número válido: " + parts[0])
-	}
-	creditsFloat, _ := strconv.ParseFloat(parts[0], 64)
-	credits := int(creditsFloat)
-	subjectType := determineSubjectType(parts[1:])
-	var grade float64
-	for _, part := range parts {
-		if g, err := strconv.ParseFloat(part, 64); err == nil && g >= 0.0 && g <= 5.0 {
-			grade = g
-			break
-		}
-	}
-	status := "APROBADA"
-	if strings.Contains(strings.ToUpper(line), "REPROBADA") {
-		status = "REPROBADA"
-	} else if strings.Contains(strings.ToUpper(line), "EN CURSO") {
-		status = "EN CURSO"
-	}
-	var semester string
-	for _, part := range parts {
-		if strings.Contains(part, "-") && len(part) >= 6 {
-			semester = part
-			break
-		}
-	}
-	return ParsedSubject{
-		Code:     code,
-		Name:     name,
-		Credits:  credits,
-		Type:     subjectType,
-		Grade:    grade,
-		Status:   status,
-		Semester: semester,
-	}, nil
-}
-
-// determineSubjectType determina el tipo de materia basándose en palabras clave
-func determineSubjectType(parts []string) string {
-	text := strings.Join(parts, " ")
-	text = strings.ToUpper(text)
-	
-	if strings.Contains(text, "FUND. OBLIGATORIA") || strings.Contains(text, "FUNDAMENTACIÓN OBLIGATORIA") {
-		return "FUND. OBLIGATORIA"
-	}
-	if strings.Contains(text, "FUND. OPTATIVA") || strings.Contains(text, "FUNDAMENTACIÓN OPTATIVA") {
-		return "FUND. OPTATIVA"
-	}
-	if strings.Contains(text, "DISCIPLINAR OBLIGATORIA") {
-		return "DISCIPLINAR OBLIGATORIA"
-	}
-	if strings.Contains(text, "DISCIPLINAR OPTATIVA") {
-		return "DISCIPLINAR OPTATIVA"
-	}
-	if strings.Contains(text, "LIBRE ELECCIÓN") {
-		return "LIBRE ELECCIÓN"
-	}
-	if strings.Contains(text, "TRABAJO DE GRADO") {
-		return "TRABAJO DE GRADO"
-	}
-	if strings.Contains(text, "NIVELACIÓN") {
-		return "NIVELACIÓN"
-	}
-	
-	return "LIBRE ELECCIÓN" // Por defecto
 }
 
 // Limpieza y normalización del texto de historia académica
@@ -440,15 +434,37 @@ func preprocessAcademicHistoryText(raw string) string {
 	// 1. Reemplazar saltos de línea de Windows por Unix
 	cleaned := strings.ReplaceAll(raw, "\r\n", "\n")
 	cleaned = strings.ReplaceAll(cleaned, "\r", "\n")
-	// 2. Reemplazar múltiples saltos de línea por uno solo
+
+	// 2. Insertar salto de línea antes de cada materia (NOMBRE (CÓDIGO))
+	// Esto detecta patrones como: Nombre de materia (código)
+	cleaned = regexp.MustCompile(`([A-Za-zÁÉÍÓÚÑáéíóúüÜ0-9\- ]+\([0-9A-Z\-]+\))`).ReplaceAllString(cleaned, "\n$1")
+
+	// 3. Insertar salto de línea antes de cada número de créditos (1 o 2 dígitos)
+	cleaned = regexp.MustCompile(`([A-Za-zÁÉÍÓÚÑáéíóúüÜ)]+)(\d{1,2})F`).ReplaceAllString(cleaned, "$1\n$2F")
+	// Y también antes de cada número de créditos suelto
+	cleaned = regexp.MustCompile(`([A-Za-zÁÉÍÓÚÑáéíóúüÜ)]+)(\d{1,2})\b`).ReplaceAllString(cleaned, "$1\n$2")
+
+	// 4. Insertar salto de línea antes de cada tipo de materia
+	cleaned = regexp.MustCompile(`(\d{1,2})((FUND\. OBLIGATORIA|FUND\. OPTATIVA|DISCIPLINAR OBLIGATORIA|DISCIPLINAR OPTATIVA|LIBRE ELECCIÓN|NIVELACIÓN|TRABAJO DE GRADO))`).ReplaceAllString(cleaned, "$1\n$2")
+
+	// 5. Insertar salto de línea antes de cada periodo (año-semestre)
+	cleaned = regexp.MustCompile(`(OBLIGATORIA|OPTATIVA|ELECCIÓN|NIVELACIÓN|GRADO)(\d{4}-\dS|\d{4}-\dS|\d{4}-\d{1,2}S|\d{4}-\d{1,2})`).ReplaceAllString(cleaned, "$1\n$2")
+
+	// 6. Insertar salto de línea antes de cada calificación (número decimal)
+	cleaned = regexp.MustCompile(`(\d{4}-\dS|\d{4}-\d{1,2}S|\d{4}-\d{1,2})( Ordinaria)?([0-9]\.[0-9])`).ReplaceAllString(cleaned, "$1$2\n$3")
+
+	// 7. Insertar salto de línea antes de cada "APROBADA" o "APROBAD" (por si hay variantes)
+	cleaned = regexp.MustCompile(`([0-9]\.[0-9])((APROBADA|APROBAD))`).ReplaceAllString(cleaned, "$1\n$2")
+
+	// 8. Reemplazar múltiples saltos de línea por uno solo
 	cleaned = regexp.MustCompile(`\n+`).ReplaceAllString(cleaned, "\n")
-	// 3. Quitar espacios en blanco al inicio y final de cada línea
+	// 9. Quitar espacios en blanco al inicio y final de cada línea
 	lines := strings.Split(cleaned, "\n")
 	for i, line := range lines {
 		lines[i] = strings.TrimSpace(line)
 	}
 	cleaned = strings.Join(lines, "\n")
-	// 4. Quitar espacios en blanco al inicio y final del texto
+	// 10. Quitar espacios en blanco al inicio y final del texto
 	cleaned = strings.TrimSpace(cleaned)
 	return cleaned
 }
@@ -470,6 +486,8 @@ func compareAcademicHistoryFromText(c *gin.Context) {
 		// Leer desde form-data o x-www-form-urlencoded
 		academicHistoryText = c.PostForm("academic_history_text")
 		targetCareerCode = c.PostForm("target_career_code")
+		fmt.Printf("[DEBUG] academic_history_text recibido: '%s'\n", academicHistoryText)
+		fmt.Printf("[DEBUG] target_career_code recibido: '%s'\n", targetCareerCode)
 		if academicHistoryText == "" || targetCareerCode == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Faltan campos en el formulario: academic_history_text y target_career_code son requeridos"})
 			return
@@ -483,7 +501,7 @@ func compareAcademicHistoryFromText(c *gin.Context) {
 	cleanedText := preprocessAcademicHistoryText(academicHistoryText)
 
 	// Parsear la historia académica del texto limpio
-	parsedSubjects, err := parseAcademicHistoryText(cleanedText)
+	parsedSubjects, err := parseAcademicHistoryTextFlexible(cleanedText)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia académica: " + err.Error()})
 		return
@@ -493,7 +511,7 @@ func compareAcademicHistoryFromText(c *gin.Context) {
 	var subjects []models.SubjectInput
 	for _, ps := range parsedSubjects {
 		subject := models.SubjectInput{
-			Code:     ps.Code,
+			Code:     strings.TrimSpace(ps.Code),
 			Name:     ps.Name,
 			Credits:  ps.Credits,
 			Type:     models.TipologiaAsignatura(ps.Type),
@@ -503,11 +521,13 @@ func compareAcademicHistoryFromText(c *gin.Context) {
 		}
 		subjects = append(subjects, subject)
 	}
+	fmt.Printf("[DEBUG] Subjects parseados para comparar: %+v\n", subjects)
 
 	academicHistory := models.AcademicHistoryInput{
 		CareerCode: targetCareerCode,
 		Subjects:   subjects,
 	}
+	fmt.Printf("[DEBUG] DTO enviado a comparación: %+v\n", academicHistory)
 
 	// Realizar la comparación
 	result, err := functions.CompareAcademicHistoryByCareerCode(config.DB, academicHistory)
