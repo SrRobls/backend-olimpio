@@ -108,7 +108,18 @@ func main() {
 	// Configurar CORS y middlewares
 	r := gin.Default()
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		allowedOrigins := map[string]bool{
+			"https://olimpo.vercel.app": true,
+			"http://localhost:3000": true,
+			"http://localhost:5173": true,
+			"http://localhost:8080": true,
+		}
+		if allowedOrigins[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Header("Access-Control-Allow-Origin", "https://olimpo.vercel.app")
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
