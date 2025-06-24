@@ -142,6 +142,10 @@ func main() {
 				"POST /api/compare - Comparar historia académica con plan de estudio",
 				"POST /api/compare-by-career - Comparar por código de carrera",
 				"POST /api/api-compare - Comparar historia académica en texto plano",
+				"POST /api/careers - Crear nueva carrera",
+				"POST /api/study-plans - Crear nuevo plan de estudio",
+				"POST /api/subjects - Crear nueva materia",
+				"POST /api/complete-study-plan - Crear plan completo con materias"
 			},
 		})
 	})
@@ -167,6 +171,17 @@ func main() {
 		
 		// Nuevo endpoint para comparar historia académica en texto plano
 		api.POST("/api-compare", compareAcademicHistoryFromText)
+
+
+
+		//endpoint para crear carrera
+		api.POST("/careers", createCareer)
+		//endpoint crear plan de estudio vacio
+		api.POST("/study-plans", createStudyPlan) 
+		//endpoint crear materia
+		api.POST("/subjects", createSubject)
+		//endpoint crear plan de estudio completo
+		api.POST("/complete-study-plan", createCompleteStudyPlan)
 	}
 
 
@@ -284,6 +299,164 @@ func compareAcademicHistory(c *gin.Context) {
 			"completion_percentage":      calculateCompletionPercentage(result.CreditsSummary),
 		},
 	})
+}
+
+// createCareer creates a new career
+func createCareer(c *gin.Context) {
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Code        string `json:"code" binding:"required"`
+		Description string `json:"description"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	career, err := services.CreateCareer(config.DB, req.Name, req.Code, req.Description)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusCreated, gin.H{"career": career})
+}
+
+// createStudyPlan creates a new study plan
+func createStudyPlan(c *gin.Context) {
+	var req struct {
+		CareerID                uint   `json:"career_id" binding:"required"`
+		Version                 string `json:"version" binding:"required"`
+		FundObligatoriaCredits  int    `json:"fund_obligatoria_credits" binding:"required"`
+		FundOptativaCredits     int    `json:"fund_optativa_credits" binding:"required"`
+		DisObligatoriaCredits   int    `json:"dis_obligatoria_credits" binding:"required"`
+		DisOptativaCredits      int    `json:"dis_optativa_credits" binding:"required"`
+		LibreCredits            int    `json:"libre_credits" binding:"required"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	studyPlan, err := services.CreateStudyPlan(
+		config.DB,
+		req.CareerID,
+		req.Version,
+		req.FundObligatoriaCredits,
+		req.FundOptativaCredits,
+		req.DisObligatoriaCredits,
+		req.DisOptativaCredits,
+		req.LibreCredits,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusCreated, gin.H{"study_plan": studyPlan})
+}
+
+// createSubject creates a new subject
+func createSubject(c *gin.Context) {
+	var req struct {
+		StudyPlanID uint   `json:"study_plan_id" binding:"required"`
+		Code        string `json:"code" binding:"required"`
+		Name        string `json:"name" binding:"required"`
+		Type        string `json:"type" binding:"required"`
+		Credits     int    `json:"credits" binding:"required"`
+		Description string `json:"description"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	subject, err := services.CreateSubject(
+		config.DB,
+		req.StudyPlanID,
+		req.Code,
+		req.Name,
+		req.Type,
+		req.Description,
+		req.Credits,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusCreated, gin.H{"subject": subject})
+}
+
+// createCompleteStudyPlan creates a study plan with subjects in one transaction
+func createCompleteStudyPlan(c *gin.Context) {
+	var req struct {
+		CareerID                uint   `json:"career_id" binding:"required"`
+		Version                 string `json:"version" binding:"required"`
+		FundObligatoriaCredits  int    `json:"fund_obligatoria_credits" binding:"required"`
+		FundOptativaCredits     int    `json:"fund_optativa_credits" binding:"required"`
+		DisObligatoriaCredits   int    `json:"dis_obligatoria_credits" binding:"required"`
+		DisOptativaCredits      int    `json:"dis_optativa_credits" binding:"required"`
+		LibreCredits            int    `json:"libre_credits" binding:"required"`
+		Subjects                []struct {
+			Code        string `json:"code" binding:"required"`
+			Name        string `json:"name" binding:"required"`
+			Type        string `json:"type" binding:"required"`
+			Credits     int    `json:"credits" binding:"required"`
+			Description string `json:"description"`
+		} `json:"subjects" binding:"required"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	// Convert subjects to the format expected by the service
+	subjects := make([]struct {
+		Code        string
+		Name        string
+		Type        string
+		Credits     int
+		Description string
+	}, len(req.Subjects))
+	
+	for i, s := range req.Subjects {
+		subjects[i] = struct {
+			Code        string
+			Name        string
+			Type        string
+			Credits     int
+			Description string
+		}{
+			Code:        s.Code,
+			Name:        s.Name,
+			Type:        s.Type,
+			Credits:     s.Credits,
+			Description: s.Description,
+		}
+	}
+	
+	studyPlan, err := services.CreateCompleteStudyPlan(
+		config.DB,
+		req.CareerID,
+		req.Version,
+		req.FundObligatoriaCredits,
+		req.FundOptativaCredits,
+		req.DisObligatoriaCredits,
+		req.DisOptativaCredits,
+		req.LibreCredits,
+		subjects,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusCreated, gin.H{"study_plan": studyPlan})
 }
 
 // compareByCareerCode compara usando el código de carrera (más simple)
