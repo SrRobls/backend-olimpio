@@ -207,3 +207,179 @@ func CompareAcademicHistoryByCareerCode(db *gorm.DB, academicHistory models.Acad
 	// Realizar la comparación
 	return CompareAcademicHistoryWithStudyPlan(db, academicHistory, studyPlan.ID)
 }
+
+
+
+
+
+// CreateCareer crea una carrera vacia (Sin planes de estudio)
+func CreateCareer(db *gorm.DB, name, code, description string) (*models.Career, error) {
+	// Validate required fields
+	if name == "" || code == "" {
+		return nil, errors.New("name and code are required")
+	}
+
+	// Check if career code already exists
+	var existingCareer models.Career
+	if err := db.Where("code = ?", code).First(&existingCareer).Error; err == nil {
+		return nil, errors.New("career with this code already exists")
+	}
+
+	// Create new career
+	career := models.Career{
+		Name:        name,
+		Code:        code,
+		Description: description,
+	}
+
+	if err := db.Create(&career).Error; err != nil {
+		return nil, errors.New("failed to create career: " + err.Error())
+	}
+
+	return &career, nil
+}
+
+// CreateStudyPlan crea un plan de estudio vacio (Sin subjects) y lo asocia a una carrera
+func CreateStudyPlan(db *gorm.DB, careerID uint, version string, fundObligatoriaCredits, fundOptativaCredits, disObligatoriaCredits, disOptativaCredits, libreCredits int) (*models.StudyPlan, error) {
+	// Validate required fields
+	if version == "" {
+		return nil, errors.New("version is required")
+	}
+
+	// Check if career exists
+	var career models.Career
+	if err := db.First(&career, careerID).Error; err != nil {
+		return nil, errors.New("career not found")
+	}
+
+	// Check if study plan version already exists for this career
+	var existingPlan models.StudyPlan
+	if err := db.Where("career_id = ? AND version = ?", careerID, version).First(&existingPlan).Error; err == nil {
+		return nil, errors.New("study plan with this version already exists for this career")
+	}
+
+	// Calculate total credits
+	totalCredits := fundObligatoriaCredits + fundOptativaCredits + disObligatoriaCredits + disOptativaCredits + libreCredits
+
+	// Create new study plan
+	studyPlan := models.StudyPlan{
+		CareerID:                careerID,
+		Version:                 version,
+		IsActive:                true, // New plans are active by default
+		FundObligatoriaCredits:  fundObligatoriaCredits,
+		FundOptativaCredits:     fundOptativaCredits,
+		DisObligatoriaCredits:   disObligatoriaCredits,
+		DisOptativaCredits:      disOptativaCredits,
+		LibreCredits:            libreCredits,
+		TotalCredits:            totalCredits,
+	}
+
+	if err := db.Create(&studyPlan).Error; err != nil {
+		return nil, errors.New("failed to create study plan: " + err.Error())
+	}
+
+	// Load the career relationship
+	db.Preload("Career").First(&studyPlan, studyPlan.ID)
+
+	return &studyPlan, nil
+}
+
+// CreateSubject crea un nuevo subject y lo asocia a un plan de estudios
+func CreateSubject(db *gorm.DB, studyPlanID uint, code, name, subjectType, description string, credits int) (*models.Subject, error) {
+	// Validate required fields
+	if code == "" || name == "" || subjectType == "" {
+		return nil, errors.New("code, name, and type are required")
+	}
+
+	// Validate subject type
+	validTypes := []string{"fund.obligatoria", "fund.optativa", "dis.obligatoria", "dis.optativa", "libre"}
+	isValidType := false
+	for _, validType := range validTypes {
+		if subjectType == validType {
+			isValidType = true
+			break
+		}
+	}
+	if !isValidType {
+		return nil, errors.New("invalid subject type. Must be one of: fund.obligatoria, fund.optativa, dis.obligatoria, dis.optativa, libre")
+	}
+
+	// Validate credits
+	if credits <= 0 {
+		return nil, errors.New("credits must be greater than 0")
+	}
+
+	// Check if study plan exists
+	var studyPlan models.StudyPlan
+	if err := db.First(&studyPlan, studyPlanID).Error; err != nil {
+		return nil, errors.New("study plan not found")
+	}
+
+	// Check if subject code already exists
+	var existingSubject models.Subject
+	if err := db.Where("code = ?", code).First(&existingSubject).Error; err == nil {
+		return nil, errors.New("subject with this code already exists")
+	}
+
+	// Create new subject
+	subject := models.Subject{
+		Code:        code,
+		Name:        name,
+		Credits:     credits,
+		Type:        subjectType,
+		Description: description,
+	}
+
+	if err := db.Create(&subject).Error; err != nil {
+		return nil, errors.New("failed to create subject: " + err.Error())
+	}
+
+	// Associate subject with study plan (many-to-many relationship)
+	if err := db.Model(&studyPlan).Association("Subjects").Append(&subject); err != nil {
+		return nil, errors.New("failed to associate subject with study plan: " + err.Error())
+	}
+
+	return &subject, nil
+}
+
+// Helper function to create a complete study plan with subjects in one go
+func CreateCompleteStudyPlan(db *gorm.DB, careerID uint, version string, fundObligatoriaCredits, fundOptativaCredits, disObligatoriaCredits, disOptativaCredits, libreCredits int, subjects []struct {
+	Code        string
+	Name        string
+	Type        string
+	Credits     int
+	Description string
+}) (*models.StudyPlan, error) {
+	// Start transaction
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create study plan
+	studyPlan, err := CreateStudyPlan(tx, careerID, version, fundObligatoriaCredits, fundOptativaCredits, disObligatoriaCredits, disOptativaCredits, libreCredits)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// Create and associate subjects
+	for _, subjectData := range subjects {
+		_, err := CreateSubject(tx, studyPlan.ID, subjectData.Code, subjectData.Name, subjectData.Type, subjectData.Description, subjectData.Credits)
+		if err != nil {
+			tx.Rollback()
+			return nil, errors.New("failed to create subject " + subjectData.Code + ": " + err.Error())
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return nil, errors.New("failed to commit transaction: " + err.Error())
+	}
+
+	// Reload study plan with subjects
+	db.Preload("Career").Preload("Subjects").First(studyPlan, studyPlan.ID)
+
+
