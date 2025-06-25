@@ -13,6 +13,7 @@ import (
 	"strings"
 	"regexp"
 	"fmt"
+	"github.com/gin-contrib/cors"
 )
 
 
@@ -107,27 +108,13 @@ func main() {
 
 	// Configurar CORS y middlewares
 	r := gin.Default()
-	r.Use(func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		allowedOrigins := map[string]bool{
-			"https://olimpo.vercel.app": true,
-			"http://localhost:3000": true,
-			"http://localhost:5173": true,
-			"http://localhost:8080": true,
-		}
-		if allowedOrigins[origin] {
-			c.Header("Access-Control-Allow-Origin", origin)
-		} else {
-			c.Header("Access-Control-Allow-Origin", "https://olimpo.vercel.app")
-		}
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-		c.Next()
-	})
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"https://olimpo.vercel.app", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	// Ruta raíz
 	r.GET("/", func(c *gin.Context) {
