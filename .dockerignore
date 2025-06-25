@@ -1,0 +1,37 @@
+# Excluir el proyecto Next.js completo
+historiasfmunal/
+
+# Archivos de desarrollo y configuración
+.git/
+.gitignore
+README.md
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Archivos de logs
+*.log
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Archivos de test
+test_build
+test_api_compare.sh
+
+# Scripts y archivos de desarrollo
+scripts/
+resguardo
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db 
