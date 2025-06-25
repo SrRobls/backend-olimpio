@@ -28,7 +28,7 @@ const (
 	TipologiaTrabajoGrado          TipologiaAsignatura = "TRABAJO DE GRADO"
 )
 
-// ValidarTipologia verifica si una tipología es válida
+// ValidarTipologia verifica si una tipología es válida     
 func ValidarTipologia(tipo string) bool {
 	switch TipologiaAsignatura(tipo) {
 	case TipologiaDisciplinarOptativa,
