@@ -83,17 +83,17 @@ type Subject struct {
 // Equivalence representa una equivalencia entre materias de diferentes planes
 type Equivalence struct {
 	ID              uint      `gorm:"primaryKey"`
-	SourceSubjectID uint      `gorm:"not null"` // Materia origen
-	TargetSubjectID uint      `gorm:"not null"` // Materia destino
+	SourceSubjectID uint      `gorm:"not null"` // Materia origen (nueva materia que se crea)
+	TargetSubjectID uint      `gorm:"not null"` // Materia destino (materia existente del plan)
 	Type            string    `gorm:"size:20;not null"` // Tipo de equivalencia (total, parcial, etc)
 	Notes           string    `gorm:"type:text"`
-	StudyPlanID     uint      `gorm:"not null"` // Plan de estudio al que aplica la equivalencia
+	CareerID        uint      `gorm:"not null"` // Carrera a la que aplica la equivalencia
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	// Relaciones
-	SourceSubject Subject   `gorm:"foreignKey:SourceSubjectID"`
-	TargetSubject Subject   `gorm:"foreignKey:TargetSubjectID"`
-	StudyPlan     StudyPlan `gorm:"foreignKey:StudyPlanID"`
+	SourceSubject Subject `gorm:"foreignKey:SourceSubjectID"`
+	TargetSubject Subject `gorm:"foreignKey:TargetSubjectID"`
+	Career        Career  `gorm:"foreignKey:CareerID"`
 }
 
 // AcademicHistoryInput representa la entrada de historia académica para procesar

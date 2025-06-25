@@ -208,10 +208,6 @@ func CompareAcademicHistoryByCareerCode(db *gorm.DB, academicHistory models.Acad
 	return CompareAcademicHistoryWithStudyPlan(db, academicHistory, studyPlan.ID)
 }
 
-
-
-
-
 // CreateCareer crea una carrera vacia (Sin planes de estudio)
 func CreateCareer(db *gorm.DB, name, code, description string) (*models.Career, error) {
 	// Validate required fields
@@ -291,17 +287,9 @@ func CreateSubject(db *gorm.DB, studyPlanID uint, code, name, subjectType, descr
 		return nil, errors.New("code, name, and type are required")
 	}
 
-	// Validate subject type
-	validTypes := []string{"fund.obligatoria", "fund.optativa", "dis.obligatoria", "dis.optativa", "libre"}
-	isValidType := false
-	for _, validType := range validTypes {
-		if subjectType == validType {
-			isValidType = true
-			break
-		}
-	}
-	if !isValidType {
-		return nil, errors.New("invalid subject type. Must be one of: fund.obligatoria, fund.optativa, dis.obligatoria, dis.optativa, libre")
+	// Validate subject type using the model's validation function
+	if !models.ValidarTipologia(subjectType) {
+		return nil, errors.New("invalid subject type. Must be one of: FUND. OBLIGATORIA, FUND. OPTATIVA, DISCIPLINAR OBLIGATORIA, DISCIPLINAR OPTATIVA, LIBRE ELECCIÓN, TRABAJO DE GRADO")
 	}
 
 	// Validate credits
@@ -326,7 +314,7 @@ func CreateSubject(db *gorm.DB, studyPlanID uint, code, name, subjectType, descr
 		Code:        code,
 		Name:        name,
 		Credits:     credits,
-		Type:        subjectType,
+		Type:        models.TipologiaAsignatura(subjectType),
 		Description: description,
 	}
 
@@ -381,5 +369,253 @@ func CreateCompleteStudyPlan(db *gorm.DB, careerID uint, version string, fundObl
 
 	// Reload study plan with subjects
 	db.Preload("Career").Preload("Subjects").First(studyPlan, studyPlan.ID)
+
+	return studyPlan, nil
+}
+
+// ===== CRUD FUNCTIONS FOR EQUIVALENCES =====
+
+// CreateEquivalence crea una nueva equivalencia entre materias
+func CreateEquivalence(db *gorm.DB, sourceSubjectData struct {
+	Code        string `json:"code" binding:"required"`
+	Name        string `json:"name" binding:"required"`
+	Type        string `json:"type" binding:"required"`
+	Credits     int    `json:"credits" binding:"required"`
+	Description string `json:"description"`
+}, targetSubjectID uint, careerID uint, equivalenceType, notes string) (*models.Equivalence, error) {
+	// Validar campos requeridos
+	if sourceSubjectData.Code == "" || sourceSubjectData.Name == "" || sourceSubjectData.Type == "" {
+		return nil, errors.New("code, name, and type are required for source subject")
+	}
+	if targetSubjectID == 0 {
+		return nil, errors.New("target subject ID is required")
+	}
+	if careerID == 0 {
+		return nil, errors.New("career ID is required")
+	}
+	if equivalenceType == "" {
+		return nil, errors.New("equivalence type is required")
+	}
+
+	// Validar que la carrera existe
+	var career models.Career
+	if err := db.First(&career, careerID).Error; err != nil {
+		return nil, errors.New("career not found")
+	}
+
+	// Validar que la materia destino existe
+	var targetSubject models.Subject
+	if err := db.First(&targetSubject, targetSubjectID).Error; err != nil {
+		return nil, errors.New("target subject not found")
+	}
+
+	// Validar tipo de materia origen
+	if !models.ValidarTipologia(sourceSubjectData.Type) {
+		return nil, errors.New("invalid source subject type. Must be one of: FUND. OBLIGATORIA, FUND. OPTATIVA, DISCIPLINAR OBLIGATORIA, DISCIPLINAR OPTATIVA, LIBRE ELECCIÓN, TRABAJO DE GRADO")
+	}
+
+	// Validar créditos
+	if sourceSubjectData.Credits <= 0 {
+		return nil, errors.New("credits must be greater than 0")
+	}
+
+	// Buscar si ya existe la materia de origen por código
+	var sourceSubject models.Subject
+	err := db.Where("code = ?", sourceSubjectData.Code).First(&sourceSubject).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No existe, crearla
+			sourceSubject = models.Subject{
+				Code:        sourceSubjectData.Code,
+				Name:        sourceSubjectData.Name,
+				Credits:     sourceSubjectData.Credits,
+				Type:        models.TipologiaAsignatura(sourceSubjectData.Type),
+				Description: sourceSubjectData.Description,
+			}
+			if err := db.Create(&sourceSubject).Error; err != nil {
+				return nil, errors.New("failed to create source subject: " + err.Error())
+			}
+		} else {
+			return nil, errors.New("failed to check source subject: " + err.Error())
+		}
+	}
+	// Si ya existe, simplemente la reutilizamos (no la actualizamos aquí)
+
+	// Crear la equivalencia
+	equivalence := models.Equivalence{
+		SourceSubjectID: sourceSubject.ID,
+		TargetSubjectID: targetSubjectID,
+		Type:            equivalenceType,
+		Notes:           notes,
+		CareerID:        careerID,
+	}
+
+	if err := db.Create(&equivalence).Error; err != nil {
+		return nil, errors.New("failed to create equivalence: " + err.Error())
+	}
+
+	// Cargar las relaciones
+	db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").First(&equivalence, equivalence.ID)
+
+	return &equivalence, nil
+}
+
+// GetEquivalenceByID obtiene una equivalencia por su ID
+func GetEquivalenceByID(db *gorm.DB, equivalenceID uint) (*models.Equivalence, error) {
+	var equivalence models.Equivalence
+	if err := db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").
+		First(&equivalence, equivalenceID).Error; err != nil {
+		return nil, errors.New("equivalence not found")
+	}
+	return &equivalence, nil
+}
+
+// GetAllEquivalences obtiene todas las equivalencias
+func GetAllEquivalences(db *gorm.DB) ([]models.Equivalence, error) {
+	var equivalences []models.Equivalence
+	if err := db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").
+		Find(&equivalences).Error; err != nil {
+		return nil, errors.New("failed to fetch equivalences: " + err.Error())
+	}
+	return equivalences, nil
+}
+
+// GetEquivalencesByCareer obtiene todas las equivalencias de una carrera específica
+func GetEquivalencesByCareer(db *gorm.DB, careerID uint) ([]models.Equivalence, error) {
+	var equivalences []models.Equivalence
+	if err := db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").
+		Where("career_id = ?", careerID).Find(&equivalences).Error; err != nil {
+		return nil, errors.New("failed to fetch equivalences for career: " + err.Error())
+	}
+	return equivalences, nil
+}
+
+// GetEquivalencesByCareerCode obtiene todas las equivalencias de una carrera por su código
+func GetEquivalencesByCareerCode(db *gorm.DB, careerCode string) ([]models.Equivalence, error) {
+	var equivalences []models.Equivalence
+	if err := db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").
+		Joins("JOIN careers ON careers.id = equivalences.career_id").
+		Where("careers.code = ?", careerCode).Find(&equivalences).Error; err != nil {
+		return nil, errors.New("failed to fetch equivalences for career code: " + err.Error())
+	}
+	return equivalences, nil
+}
+
+// UpdateEquivalence actualiza una equivalencia existente
+func UpdateEquivalence(db *gorm.DB, equivalenceID uint, updates struct {
+	Type            string `json:"type"`
+	Notes           string `json:"notes"`
+	TargetSubjectID uint   `json:"target_subject_id"`
+}) (*models.Equivalence, error) {
+	// Verificar que la equivalencia existe
+	var equivalence models.Equivalence
+	if err := db.First(&equivalence, equivalenceID).Error; err != nil {
+		return nil, errors.New("equivalence not found")
+	}
+
+	// Actualizar campos
+	if updates.Type != "" {
+		equivalence.Type = updates.Type
+	}
+	if updates.Notes != "" {
+		equivalence.Notes = updates.Notes
+	}
+	if updates.TargetSubjectID != 0 {
+		// Validar que la materia destino existe
+		var targetSubject models.Subject
+		if err := db.First(&targetSubject, updates.TargetSubjectID).Error; err != nil {
+			return nil, errors.New("target subject not found")
+		}
+		equivalence.TargetSubjectID = updates.TargetSubjectID
+	}
+
+	if err := db.Save(&equivalence).Error; err != nil {
+		return nil, errors.New("failed to update equivalence: " + err.Error())
+	}
+
+	// Cargar las relaciones
+	db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").First(&equivalence, equivalence.ID)
+
+	return &equivalence, nil
+}
+
+// UpdateSourceSubject actualiza la materia origen de una equivalencia
+func UpdateSourceSubject(db *gorm.DB, equivalenceID uint, updates struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Credits     int    `json:"credits"`
+	Description string `json:"description"`
+}) (*models.Equivalence, error) {
+	// Verificar que la equivalencia existe y obtener el ID de la materia origen
+	var equivalence models.Equivalence
+	if err := db.First(&equivalence, equivalenceID).Error; err != nil {
+		return nil, errors.New("equivalence not found")
+	}
+
+	// Buscar la materia origen por ID
+	var subject models.Subject
+	if err := db.First(&subject, equivalence.SourceSubjectID).Error; err != nil {
+		return nil, errors.New("source subject not found")
+	}
+
+	// Validar y actualizar campos
+	updateFields := make(map[string]interface{})
+	if updates.Code != "" {
+		updateFields["code"] = updates.Code
+	}
+	if updates.Name != "" {
+		updateFields["name"] = updates.Name
+	}
+	if updates.Type != "" {
+		if !models.ValidarTipologia(updates.Type) {
+			return nil, errors.New("invalid subject type")
+		}
+		updateFields["type"] = models.TipologiaAsignatura(updates.Type)
+	}
+	if updates.Credits > 0 {
+		updateFields["credits"] = updates.Credits
+	}
+	if updates.Description != "" {
+		updateFields["description"] = updates.Description
+	}
+
+	if len(updateFields) > 0 {
+		if err := db.Model(&subject).Updates(updateFields).Error; err != nil {
+			return nil, errors.New("failed to update source subject: " + err.Error())
+		}
+	}
+
+	// Recargar equivalence con la materia actualizada
+	db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").First(&equivalence, equivalence.ID)
+	return &equivalence, nil
+}
+
+// DeleteEquivalence elimina una equivalencia (pero NO elimina la materia de origen)
+func DeleteEquivalence(db *gorm.DB, equivalenceID uint) error {
+	// Verificar que la equivalencia existe
+	var equivalence models.Equivalence
+	if err := db.First(&equivalence, equivalenceID).Error; err != nil {
+		return errors.New("equivalence not found")
+	}
+
+	// Eliminar solo la equivalencia
+	if err := db.Delete(&equivalence).Error; err != nil {
+		return errors.New("failed to delete equivalence: " + err.Error())
+	}
+
+	return nil
+}
+
+// GetEquivalencesBySubject obtiene todas las equivalencias donde una materia específica aparece
+func GetEquivalencesBySubject(db *gorm.DB, subjectID uint) ([]models.Equivalence, error) {
+	var equivalences []models.Equivalence
+	if err := db.Preload("SourceSubject").Preload("TargetSubject").Preload("Career").
+		Where("source_subject_id = ? OR target_subject_id = ?", subjectID, subjectID).
+		Find(&equivalences).Error; err != nil {
+		return nil, errors.New("failed to fetch equivalences for subject: " + err.Error())
+	}
+	return equivalences, nil
+}
 
 

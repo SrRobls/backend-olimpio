@@ -145,7 +145,15 @@ func main() {
 				"POST /api/careers - Crear nueva carrera",
 				"POST /api/study-plans - Crear nuevo plan de estudio",
 				"POST /api/subjects - Crear nueva materia",
-				"POST /api/complete-study-plan - Crear plan completo con materias"
+				"POST /api/complete-study-plan - Crear plan completo con materias",
+				
+				"GET /api/equivalences - Obtener todas las equivalencias",
+				"GET /api/careers/:code/equivalences - Obtener equivalencias por carrera",
+				"GET /api/equivalences/:id - Obtener equivalencia por ID",
+				"POST /api/equivalences - Crear nueva equivalencia",
+				"PUT /api/equivalences/:id - Actualizar equivalencia",
+				"PUT /api/equivalences/:id/source-subject - Actualizar materia origen",
+				"DELETE /api/equivalences/:id - Eliminar equivalencia",
 			},
 		})
 	})
@@ -182,6 +190,25 @@ func main() {
 		api.POST("/subjects", createSubject)
 		//endpoint crear plan de estudio completo
 		api.POST("/complete-study-plan", createCompleteStudyPlan)
+		
+		// Obtener todas las asignaturas
+		api.GET("/subjects", getAllSubjects)
+		
+		// ===== EQUIVALENCES CRUD ENDPOINTS =====
+		// Obtener todas las equivalencias
+		api.GET("/equivalences", getEquivalences)
+		// Obtener equivalencias por carrera
+		api.GET("/careers/:code/equivalences", getEquivalencesByCareer)
+		// Obtener equivalencia por ID
+		api.GET("/equivalences/:id", getEquivalenceByID)
+		// Crear nueva equivalencia
+		api.POST("/equivalences", createEquivalence)
+		// Actualizar equivalencia
+		api.PUT("/equivalences/:id", updateEquivalence)
+		// Actualizar materia origen de equivalencia
+		api.PUT("/equivalences/:id/source-subject", updateEquivalenceSourceSubject)
+		// Eliminar equivalencia
+		api.DELETE("/equivalences/:id", deleteEquivalence)
 	}
 
 
@@ -314,7 +341,7 @@ func createCareer(c *gin.Context) {
 		return
 	}
 	
-	career, err := services.CreateCareer(config.DB, req.Name, req.Code, req.Description)
+	career, err := functions.CreateCareer(config.DB, req.Name, req.Code, req.Description)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -340,7 +367,7 @@ func createStudyPlan(c *gin.Context) {
 		return
 	}
 	
-	studyPlan, err := services.CreateStudyPlan(
+	studyPlan, err := functions.CreateStudyPlan(
 		config.DB,
 		req.CareerID,
 		req.Version,
@@ -374,7 +401,7 @@ func createSubject(c *gin.Context) {
 		return
 	}
 	
-	subject, err := services.CreateSubject(
+	subject, err := functions.CreateSubject(
 		config.DB,
 		req.StudyPlanID,
 		req.Code,
@@ -415,7 +442,7 @@ func createCompleteStudyPlan(c *gin.Context) {
 		return
 	}
 	
-	// Convert subjects to the format expected by the service
+	// Convert subjects to the format expected by the function
 	subjects := make([]struct {
 		Code        string
 		Name        string
@@ -440,7 +467,7 @@ func createCompleteStudyPlan(c *gin.Context) {
 		}
 	}
 	
-	studyPlan, err := services.CreateCompleteStudyPlan(
+	studyPlan, err := functions.CreateCompleteStudyPlan(
 		config.DB,
 		req.CareerID,
 		req.Version,
@@ -738,5 +765,176 @@ func compareAcademicHistoryFromText(c *gin.Context) {
 			"missing_subjects":          len(result.MissingSubjects),
 			"completion_percentage":     calculateCompletionPercentage(result.CreditsSummary),
 		},
+	})
+}
+
+// getEquivalences obtiene todas las equivalencias
+func getEquivalences(c *gin.Context) {
+	equivalences, err := functions.GetAllEquivalences(config.DB)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo equivalencias: " + err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"equivalences": equivalences,
+	})
+}
+
+// getEquivalencesByCareer obtiene equivalencias por carrera
+func getEquivalencesByCareer(c *gin.Context) {
+	careerCode := c.Param("code")
+	
+	equivalences, err := functions.GetEquivalencesByCareerCode(config.DB, careerCode)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo equivalencias: " + err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"equivalences": equivalences,
+	})
+}
+
+// getEquivalenceByID obtiene una equivalencia por ID
+func getEquivalenceByID(c *gin.Context) {
+	equivalenceID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de equivalencia inválido"})
+		return
+	}
+	
+	equivalence, err := functions.GetEquivalenceByID(config.DB, uint(equivalenceID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Equivalencia no encontrada: " + err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"equivalence": equivalence,
+	})
+}
+
+// createEquivalence crea una nueva equivalencia
+func createEquivalence(c *gin.Context) {
+	var req struct {
+		SourceSubject struct {
+			Code        string `json:"code" binding:"required"`
+			Name        string `json:"name" binding:"required"`
+			Type        string `json:"type" binding:"required"`
+			Credits     int    `json:"credits" binding:"required"`
+			Description string `json:"description"`
+		} `json:"source_subject" binding:"required"`
+		TargetSubjectID uint   `json:"target_subject_id" binding:"required"`
+		CareerID        uint   `json:"career_id" binding:"required"`
+		Type            string `json:"type" binding:"required"`
+		Notes           string `json:"notes"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	equivalence, err := functions.CreateEquivalence(
+		config.DB,
+		req.SourceSubject,
+		req.TargetSubjectID,
+		req.CareerID,
+		req.Type,
+		req.Notes,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusCreated, gin.H{"equivalence": equivalence})
+}
+
+// updateEquivalence actualiza una equivalencia
+func updateEquivalence(c *gin.Context) {
+	equivalenceID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de equivalencia inválido"})
+		return
+	}
+	
+	var req struct {
+		Type            string `json:"type"`
+		Notes           string `json:"notes"`
+		TargetSubjectID uint   `json:"target_subject_id"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	equivalence, err := functions.UpdateEquivalence(config.DB, uint(equivalenceID), req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{"equivalence": equivalence})
+}
+
+// updateEquivalenceSourceSubject actualiza la materia origen de una equivalencia
+func updateEquivalenceSourceSubject(c *gin.Context) {
+	equivalenceID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de equivalencia inválido"})
+		return
+	}
+	
+	var req struct {
+		Code        string `json:"code"`
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		Credits     int    `json:"credits"`
+		Description string `json:"description"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	equivalence, err := functions.UpdateSourceSubject(config.DB, uint(equivalenceID), req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{"equivalence": equivalence})
+}
+
+// deleteEquivalence elimina una equivalencia
+func deleteEquivalence(c *gin.Context) {
+	equivalenceID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de equivalencia inválido"})
+		return
+	}
+	
+	if err := functions.DeleteEquivalence(config.DB, uint(equivalenceID)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{"message": "Equivalencia eliminada exitosamente"})
+}
+
+// getAllSubjects obtiene todas las asignaturas de la base de datos
+func getAllSubjects(c *gin.Context) {
+	var subjects []models.Subject
+	if err := config.DB.Find(&subjects).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo asignaturas: " + err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"subjects": subjects,
 	})
 }

@@ -20,6 +20,40 @@ func RunMigrations(db *gorm.DB) {
 		log.Fatalf("Error ejecutando migraciones: %v", err)
 	}
 
+	// Migración manual para cambiar StudyPlanID por CareerID en equivalences
+	// Solo ejecutar si la columna StudyPlanID existe
+	var columnExists bool
+	db.Raw("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'equivalences' AND column_name = 'study_plan_id')").Scan(&columnExists)
+	
+	if columnExists {
+		log.Println("Migrando tabla equivalences: cambiando StudyPlanID por CareerID...")
+		
+		// Agregar la nueva columna CareerID
+		if err := db.Exec("ALTER TABLE equivalences ADD COLUMN IF NOT EXISTS career_id BIGINT;").Error; err != nil {
+			log.Printf("Error agregando columna career_id: %v", err)
+		}
+		
+		// Copiar datos de StudyPlanID a CareerID (asumiendo que cada plan pertenece a una carrera)
+		if err := db.Exec(`
+			UPDATE equivalences 
+			SET career_id = (
+				SELECT career_id 
+				FROM study_plans 
+				WHERE study_plans.id = equivalences.study_plan_id
+			)
+			WHERE career_id IS NULL;
+		`).Error; err != nil {
+			log.Printf("Error copiando datos de StudyPlanID a CareerID: %v", err)
+		}
+		
+		// Eliminar la columna StudyPlanID
+		if err := db.Exec("ALTER TABLE equivalences DROP COLUMN IF EXISTS study_plan_id;").Error; err != nil {
+			log.Printf("Error eliminando columna study_plan_id: %v", err)
+		}
+		
+		log.Println("Migración de equivalences completada")
+	}
+
 	// Crear índices adicionales si son necesarios
 	// Por ejemplo, para búsquedas frecuentes por código de materia
 	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_subjects_code ON subjects(code);").Error; err != nil {
@@ -27,6 +61,19 @@ func RunMigrations(db *gorm.DB) {
 	}
 
 	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_careers_code ON careers(code);").Error; err != nil {
+		log.Printf("Error creando índice: %v", err)
+	}
+	
+	// Índices para equivalences
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_equivalences_career_id ON equivalences(career_id);").Error; err != nil {
+		log.Printf("Error creando índice: %v", err)
+	}
+	
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_equivalences_source_subject_id ON equivalences(source_subject_id);").Error; err != nil {
+		log.Printf("Error creando índice: %v", err)
+	}
+	
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_equivalences_target_subject_id ON equivalences(target_subject_id);").Error; err != nil {
 		log.Printf("Error creando índice: %v", err)
 	}
 }
