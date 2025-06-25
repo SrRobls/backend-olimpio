@@ -109,7 +109,13 @@ func main() {
 	// Configurar CORS y middlewares
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"https://olimpo.vercel.app", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},
+		AllowOrigins: []string{
+			"https://olimpo.vercel.app",
+			"http://localhost:3000",
+			"http://localhost:5173",
+			"http://localhost:8080",
+			"https://olimpo-app-t6qn9.ondigitalocean.app", // Dominio backend DigitalOcean
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
