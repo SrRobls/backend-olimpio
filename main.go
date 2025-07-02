@@ -204,6 +204,81 @@ func main() {
 		api.DELETE("/equivalences/:id", deleteEquivalence)
 	}
 
+	// Endpoint para doble titulación
+	r.POST("/api/doble-titulacion", func(c *gin.Context) {
+		var req models.DobleTitulacionInput
+		contentType := c.GetHeader("Content-Type")
+		if strings.HasPrefix(contentType, "application/json") {
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+				return
+			}
+		} else if strings.HasPrefix(contentType, "multipart/form-data") || strings.HasPrefix(contentType, "application/x-www-form-urlencoded") {
+			req.HistoriaOrigen = c.PostForm("historia_origen")
+			req.HistoriaDoble = c.PostForm("historia_doble")
+			req.CodigoCarreraObjetivo = c.PostForm("codigo_carrera_objetivo")
+			if req.HistoriaOrigen == "" || req.HistoriaDoble == "" || req.CodigoCarreraObjetivo == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Faltan campos en el formulario: historia_origen, historia_doble y codigo_carrera_objetivo son requeridos"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type no soportado. Usa application/json o form-data."})
+			return
+		}
+
+		// Preprocesar y parsear ambos textos igual que en cambio de carrera
+		cleanedOrigen := preprocessAcademicHistoryText(req.HistoriaOrigen)
+		cleanedDoble := preprocessAcademicHistoryText(req.HistoriaDoble)
+
+		parsedOrigen, err := parseAcademicHistoryTextFlexible(cleanedOrigen)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia_origen: " + err.Error()})
+			return
+		}
+		parsedDoble, err := parseAcademicHistoryTextFlexible(cleanedDoble)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia_doble: " + err.Error()})
+			return
+		}
+
+		// Convertir a SubjectInput
+		materiasOrigen := make([]models.SubjectInput, 0, len(parsedOrigen))
+		for _, ps := range parsedOrigen {
+			materiasOrigen = append(materiasOrigen, models.SubjectInput{
+				Code:     strings.TrimSpace(ps.Code),
+				Name:     ps.Name,
+				Credits:  ps.Credits,
+				Type:     models.TipologiaAsignatura(ps.Type),
+				Grade:    ps.Grade,
+				Status:   ps.Status,
+				Semester: ps.Semester,
+			})
+		}
+		materiasDoble := make([]models.SubjectInput, 0, len(parsedDoble))
+		for _, ps := range parsedDoble {
+			materiasDoble = append(materiasDoble, models.SubjectInput{
+				Code:     strings.TrimSpace(ps.Code),
+				Name:     ps.Name,
+				Credits:  ps.Credits,
+				Type:     models.TipologiaAsignatura(ps.Type),
+				Grade:    ps.Grade,
+				Status:   ps.Status,
+				Semester: ps.Semester,
+			})
+		}
+
+		// Realizar la comparación de doble titulación usando las materias parseadas
+		resultado, err := functions.CompareDobleTitulacionParsed(config.DB, materiasOrigen, materiasDoble, req.CodigoCarreraObjetivo)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"resultado": resultado,
+		})
+	})
 
 	// Ejecutar servidor
 	log.Println("🚀 Servidor iniciado en http://localhost:8080")

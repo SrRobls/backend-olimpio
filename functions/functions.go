@@ -6,6 +6,8 @@ import (
 	"gorm.io/gorm"
 	"olimpo-vicedecanatura/models"
 	"strings"
+	"regexp"
+	"strconv"
 )
 
 // CompareAcademicHistoryWithStudyPlan compara la historia académica de un estudiante con un plan de estudio
@@ -616,6 +618,321 @@ func GetEquivalencesBySubject(db *gorm.DB, subjectID uint) ([]models.Equivalence
 		return nil, errors.New("failed to fetch equivalences for subject: " + err.Error())
 	}
 	return equivalences, nil
+}
+
+// ===== FUNCIONES PARA DOBLE TITULACIÓN =====
+
+// CompareDobleTitulacion compara dos historias académicas para determinar materias homologables
+// Ahora recibe el código de la carrera objetivo y busca el plan activo
+func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCarreraObjetivo string) (*models.DobleTitulacionResult, error) {
+	// 1. Obtener el plan de estudio activo de la carrera objetivo
+	planObjetivo, err := GetStudyPlanByCareerCode(db, codigoCarreraObjetivo)
+	if err != nil {
+		return nil, errors.New("plan de estudio objetivo no encontrado para la carrera: " + codigoCarreraObjetivo)
+	}
+
+	// 2. Procesar ambas historias académicas
+	materiasOrigen := procesarHistoriaAcademicaTexto(historiaOrigen)
+	materiasDoble := procesarHistoriaAcademicaTexto(historiaDoble)
+
+	// 3. Obtener equivalencias relevantes para el plan objetivo
+	var equivalencias []models.Equivalence
+	db.Preload("SourceSubject").Preload("TargetSubject").Where("career_id = ?", planObjetivo.CareerID).Find(&equivalencias)
+
+	// Crear mapa de equivalencias para búsqueda rápida
+	equivalenciaMap := make(map[string]string) // código origen -> código objetivo
+	for _, equiv := range equivalencias {
+		equivalenciaMap[equiv.SourceSubject.Code] = equiv.TargetSubject.Code
+	}
+
+	// 4. Crear mapas de materias cursadas para búsqueda rápida
+	materiasCursadasOrigen := make(map[string]models.SubjectInput)
+	for _, materia := range materiasOrigen {
+		materiasCursadasOrigen[materia.Code] = materia
+	}
+
+	materiasCursadasDoble := make(map[string]models.SubjectInput)
+	for _, materia := range materiasDoble {
+		materiasCursadasDoble[materia.Code] = materia
+	}
+
+	// 5. Comparar materias del plan objetivo con la historia de origen
+	var materiasHomologables []models.MateriaHomologable
+	totalCreditos := 0
+
+	for _, materiaPlan := range planObjetivo.Subjects {
+		// Buscar si la materia está en la historia de origen (directa o por equivalencia)
+		var materiaOrigen *models.SubjectInput
+		var codigoOrigen string
+		var nombreOrigen string
+		var tipologiaOrigen string
+		var equivalenciaInfo *models.EquivalenceResult
+
+		// Verificar coincidencia directa
+		if materia, existe := materiasCursadasOrigen[materiaPlan.Code]; existe {
+			materiaOrigen = &materia
+			codigoOrigen = materia.Code
+			nombreOrigen = materia.Name
+			tipologiaOrigen = string(materia.Type)
+		} else {
+			// Verificar por equivalencia
+			for codigoOrig, codigoObj := range equivalenciaMap {
+				if codigoObj == materiaPlan.Code {
+					if materia, existe := materiasCursadasOrigen[codigoOrig]; existe {
+						materiaOrigen = &materia
+						codigoOrigen = materia.Code
+						nombreOrigen = materia.Name
+						tipologiaOrigen = string(materia.Type)
+						equivalenciaInfo = &models.EquivalenceResult{
+							Type:  "TOTAL",
+							Notes: fmt.Sprintf("Equivalencia: %s → %s", codigoOrig, materiaPlan.Code),
+						}
+						break
+					}
+				}
+			}
+		}
+
+		// Si encontramos la materia en origen y NO está en la historia de doble titulación
+		if materiaOrigen != nil {
+			if _, yaCursadaEnDoble := materiasCursadasDoble[materiaPlan.Code]; !yaCursadaEnDoble {
+				materiaHomologable := models.MateriaHomologable{
+					CodigoObjetivo:    materiaPlan.Code,
+					NombreObjetivo:    materiaPlan.Name,
+					Creditos:          materiaPlan.Credits,
+					TipologiaObjetivo: materiaPlan.Type,
+					CodigoOrigen:      codigoOrigen,
+					NombreOrigen:      nombreOrigen,
+					TipologiaOrigen:   tipologiaOrigen,
+					Periodo:           materiaOrigen.Semester,
+					Calificacion:      materiaOrigen.Grade,
+					Equivalencia:      equivalenciaInfo,
+				}
+
+				materiasHomologables = append(materiasHomologables, materiaHomologable)
+				totalCreditos += materiaPlan.Credits
+			}
+		}
+	}
+
+	// 6. Calcular resumen
+	resumen := models.ResumenDobleTitulacion{
+		MateriasCursadasOrigen: len(materiasOrigen),
+		MateriasCursadasDoble:  len(materiasDoble),
+		MateriasHomologables:   len(materiasHomologables),
+		CreditosHomologables:   totalCreditos,
+	}
+
+	// Calcular porcentaje de homologación
+	if planObjetivo.TotalCredits > 0 {
+		resumen.PorcentajeHomologacion = float64(totalCreditos) / float64(planObjetivo.TotalCredits) * 100
+	}
+
+	return &models.DobleTitulacionResult{
+		MateriasHomologables: materiasHomologables,
+		TotalMaterias:        len(materiasHomologables),
+		TotalCreditos:        totalCreditos,
+		Resumen:              resumen,
+	}, nil
+}
+
+// CompareDobleTitulacionParsed compara dos listas de materias ya parseadas para doble titulación
+func CompareDobleTitulacionParsed(db *gorm.DB, materiasOrigen, materiasDoble []models.SubjectInput, codigoCarreraObjetivo string) (*models.DobleTitulacionResult, error) {
+	// 1. Obtener el plan de estudio activo de la carrera objetivo
+	planObjetivo, err := GetStudyPlanByCareerCode(db, codigoCarreraObjetivo)
+	if err != nil {
+		return nil, errors.New("plan de estudio objetivo no encontrado para la carrera: " + codigoCarreraObjetivo)
+	}
+
+	// 2. Obtener equivalencias relevantes para el plan objetivo
+	var equivalencias []models.Equivalence
+	db.Preload("SourceSubject").Preload("TargetSubject").Where("career_id = ?", planObjetivo.CareerID).Find(&equivalencias)
+
+	// Crear mapa de equivalencias para búsqueda rápida
+	equivalenciaMap := make(map[string]string) // código origen -> código objetivo
+	for _, equiv := range equivalencias {
+		equivalenciaMap[equiv.SourceSubject.Code] = equiv.TargetSubject.Code
+	}
+
+	// 3. Crear mapas de materias cursadas para búsqueda rápida
+	materiasCursadasOrigen := make(map[string]models.SubjectInput)
+	for _, materia := range materiasOrigen {
+		materiasCursadasOrigen[materia.Code] = materia
+	}
+
+	materiasCursadasDoble := make(map[string]models.SubjectInput)
+	for _, materia := range materiasDoble {
+		materiasCursadasDoble[materia.Code] = materia
+	}
+
+	// 4. Comparar materias del plan objetivo con la historia de origen
+	var materiasHomologables []models.MateriaHomologable
+	totalCreditos := 0
+
+	for _, materiaPlan := range planObjetivo.Subjects {
+		// Buscar si la materia está en la historia de origen (directa o por equivalencia)
+		var materiaOrigen *models.SubjectInput
+		var codigoOrigen string
+		var nombreOrigen string
+		var tipologiaOrigen string
+		var equivalenciaInfo *models.EquivalenceResult
+
+		// Verificar coincidencia directa
+		if materia, existe := materiasCursadasOrigen[materiaPlan.Code]; existe {
+			materiaOrigen = &materia
+			codigoOrigen = materia.Code
+			nombreOrigen = materia.Name
+			tipologiaOrigen = string(materia.Type)
+		} else {
+			// Verificar por equivalencia
+			for codigoOrig, codigoObj := range equivalenciaMap {
+				if codigoObj == materiaPlan.Code {
+					if materia, existe := materiasCursadasOrigen[codigoOrig]; existe {
+						materiaOrigen = &materia
+						codigoOrigen = materia.Code
+						nombreOrigen = materia.Name
+						tipologiaOrigen = string(materia.Type)
+						equivalenciaInfo = &models.EquivalenceResult{
+							Type:  "TOTAL",
+							Notes: "Equivalencia: " + codigoOrig + " → " + materiaPlan.Code,
+						}
+						break
+					}
+				}
+			}
+		}
+
+		// Si encontramos la materia en origen y NO está en la historia de doble titulación
+		if materiaOrigen != nil {
+			if _, yaCursadaEnDoble := materiasCursadasDoble[materiaPlan.Code]; !yaCursadaEnDoble {
+				materiaHomologable := models.MateriaHomologable{
+					CodigoObjetivo:    materiaPlan.Code,
+					NombreObjetivo:    materiaPlan.Name,
+					Creditos:          materiaPlan.Credits,
+					TipologiaObjetivo: materiaPlan.Type,
+					CodigoOrigen:      codigoOrigen,
+					NombreOrigen:      nombreOrigen,
+					TipologiaOrigen:   tipologiaOrigen,
+					Periodo:           materiaOrigen.Semester,
+					Calificacion:      materiaOrigen.Grade,
+					Equivalencia:      equivalenciaInfo,
+				}
+
+				materiasHomologables = append(materiasHomologables, materiaHomologable)
+				totalCreditos += materiaPlan.Credits
+			}
+		}
+	}
+
+	// 5. Calcular resumen
+	resumen := models.ResumenDobleTitulacion{
+		MateriasCursadasOrigen: len(materiasOrigen),
+		MateriasCursadasDoble:  len(materiasDoble),
+		MateriasHomologables:   len(materiasHomologables),
+		CreditosHomologables:   totalCreditos,
+	}
+
+	// Calcular porcentaje de homologación
+	if planObjetivo.TotalCredits > 0 {
+		resumen.PorcentajeHomologacion = float64(totalCreditos) / float64(planObjetivo.TotalCredits) * 100
+	}
+
+	return &models.DobleTitulacionResult{
+		MateriasHomologables: materiasHomologables,
+		TotalMaterias:        len(materiasHomologables),
+		TotalCreditos:        totalCreditos,
+		Resumen:              resumen,
+	}, nil
+}
+
+// procesarHistoriaAcademicaTexto procesa el texto de historia académica y retorna una lista de materias
+func procesarHistoriaAcademicaTexto(texto string) []models.SubjectInput {
+	var materias []models.SubjectInput
+	
+	// Dividir por líneas
+	lineas := strings.Split(texto, "\n")
+	
+	for _, linea := range lineas {
+		linea = strings.TrimSpace(linea)
+		if linea == "" {
+			continue
+		}
+		
+		// Procesar línea (asumiendo formato tabulado como en el proyecto de referencia)
+		partes := strings.Split(linea, "\t")
+		if len(partes) >= 5 {
+			nombreCompleto := partes[0]
+			
+			// Extraer código del formato "Nombre (CÓDIGO)"
+			codigo := ""
+			nombre := nombreCompleto
+			if match := regexp.MustCompile(`(.+)\s\((\d{6,}-?[A-Za-z]?)\)`).FindStringSubmatch(nombreCompleto); match != nil {
+				nombre = strings.TrimSpace(match[1])
+				codigo = strings.TrimSpace(match[2])
+			}
+			
+			// Extraer créditos
+			creditos := 0
+			if creditosStr := strings.TrimSpace(partes[1]); creditosStr != "" {
+				if c, err := strconv.Atoi(creditosStr); err == nil {
+					creditos = c
+				}
+			}
+			
+			// Extraer tipo/tipología
+			tipo := strings.TrimSpace(partes[2])
+			
+			// Extraer periodo
+			periodo := strings.TrimSpace(partes[3])
+			
+			// Extraer calificación
+			calificacion := 0.0
+			if calStr := strings.TrimSpace(partes[4]); calStr != "" {
+				if cal, err := strconv.ParseFloat(calStr, 64); err == nil {
+					calificacion = cal
+				}
+			}
+			
+			// Mapear tipología
+			tipologia := mapearTipologia(tipo)
+			
+			materia := models.SubjectInput{
+				Code:     codigo,
+				Name:     nombre,
+				Credits:  creditos,
+				Type:     tipologia,
+				Grade:    calificacion,
+				Status:   "APROBADA", // Asumimos que todas las materias en la historia están aprobadas
+				Semester: periodo,
+			}
+			
+			materias = append(materias, materia)
+		}
+	}
+	
+	return materias
+}
+
+// mapearTipologia convierte las tipologías del texto a las del modelo
+func mapearTipologia(tipo string) models.TipologiaAsignatura {
+	tipo = strings.ToUpper(tipo)
+	
+	switch {
+	case strings.Contains(tipo, "FUNDAMENTACIÓN OBLIGATORIA") || strings.Contains(tipo, "FUND. OBLIGATORIA"):
+		return models.TipologiaFundamentalObligatoria
+	case strings.Contains(tipo, "FUNDAMENTACIÓN OPTATIVA") || strings.Contains(tipo, "FUND. OPTATIVA"):
+		return models.TipologiaFundamentalOptativa
+	case strings.Contains(tipo, "DISCIPLINAR OBLIGATORIA"):
+		return models.TipologiaDisciplinarObligatoria
+	case strings.Contains(tipo, "DISCIPLINAR OPTATIVA"):
+		return models.TipologiaDisciplinarOptativa
+	case strings.Contains(tipo, "LIBRE ELECCIÓN") || strings.Contains(tipo, "LIBRE ELECCIÓN"):
+		return models.TipologiaLibreEleccion
+	case strings.Contains(tipo, "TRABAJO DE GRADO"):
+		return models.TipologiaTrabajoGrado
+	default:
+		return models.TipologiaLibreEleccion
+	}
 }
 
 

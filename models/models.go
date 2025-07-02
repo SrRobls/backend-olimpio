@@ -75,7 +75,6 @@ type Subject struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	// Relaciones
-	Prerequisites []Subject `gorm:"many2many:subject_prerequisites;"`
 	Equivalences  []Equivalence `gorm:"foreignKey:SourceSubjectID"`
 	StudyPlans    []StudyPlan   `gorm:"many2many:study_plan_subjects;"`
 }
@@ -155,4 +154,43 @@ type CreditsSummary struct {
 	DisOptativa       CreditTypeInfo `json:"dis_optativa"`
 	Libre             CreditTypeInfo `json:"libre"`
 	Total             CreditTypeInfo `json:"total"`
+}
+
+// DobleTitulacionInput representa la entrada para comparación de doble titulación
+// Ahora recibe el código de la carrera objetivo
+type DobleTitulacionInput struct {
+	HistoriaOrigen     string `json:"historia_origen" binding:"required"`     // Historia académica del primer plan
+	HistoriaDoble      string `json:"historia_doble" binding:"required"`      // Historia académica del segundo plan (doble titulación)
+	CodigoCarreraObjetivo string `json:"codigo_carrera_objetivo" binding:"required"` // Código de la carrera objetivo
+}
+
+// DobleTitulacionResult representa el resultado de la comparación de doble titulación
+type DobleTitulacionResult struct {
+	MateriasHomologables []MateriaHomologable `json:"materias_homologables"`
+	TotalMaterias        int                  `json:"total_materias"`
+	TotalCreditos        int                  `json:"total_creditos"`
+	Resumen              ResumenDobleTitulacion `json:"resumen"`
+}
+
+// MateriaHomologable representa una materia que se puede homologar en doble titulación
+type MateriaHomologable struct {
+	CodigoObjetivo     string            `json:"codigo_objetivo"`     // Código en el plan objetivo
+	NombreObjetivo     string            `json:"nombre_objetivo"`     // Nombre en el plan objetivo
+	Creditos           int               `json:"creditos"`
+	TipologiaObjetivo  TipologiaAsignatura `json:"tipologia_objetivo"` // Tipología en el plan objetivo
+	CodigoOrigen       string            `json:"codigo_origen"`       // Código original (del primer plan)
+	NombreOrigen       string            `json:"nombre_origen"`       // Nombre original (del primer plan)
+	TipologiaOrigen    string            `json:"tipologia_origen"`    // Tipología original
+	Periodo            string            `json:"periodo"`             // Periodo en que se cursó
+	Calificacion       float64           `json:"calificacion"`        // Calificación obtenida
+	Equivalencia       *EquivalenceResult `json:"equivalencia,omitempty"` // Info de equivalencia si aplica
+}
+
+// ResumenDobleTitulacion representa el resumen de la comparación
+type ResumenDobleTitulacion struct {
+	MateriasCursadasOrigen    int `json:"materias_cursadas_origen"`    // Total materias cursadas en plan origen
+	MateriasCursadasDoble     int `json:"materias_cursadas_doble"`     // Total materias cursadas en plan doble
+	MateriasHomologables      int `json:"materias_homologables"`       // Materias que se pueden homologar
+	CreditosHomologables      int `json:"creditos_homologables"`       // Créditos que se pueden homologar
+	PorcentajeHomologacion    float64 `json:"porcentaje_homologacion"` // Porcentaje de homologación
 }

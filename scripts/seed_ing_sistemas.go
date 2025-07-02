@@ -55,7 +55,6 @@ type Subject struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	// Relaciones
-	Prerequisites []Subject `gorm:"many2many:subject_prerequisites;"`
 	Equivalences  []Equivalence `gorm:"foreignKey:SourceSubjectID"`
 	StudyPlans    []StudyPlan   `gorm:"many2many:study_plan_subjects;"`
 }
