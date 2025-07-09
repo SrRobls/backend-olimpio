@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"github.com/joho/godotenv"
-	"github.com/gin-gonic/gin"
+    "github.com/gin-gonic/gin"
 	"olimpo-vicedecanatura/config"
 	"olimpo-vicedecanatura/database"
 	"olimpo-vicedecanatura/models"
@@ -107,7 +107,7 @@ func main() {
 	log.Println("✅ Datos iniciales cargados (si era necesario)")
 
 	// Configurar CORS y middlewares
-	r := gin.Default()
+    r := gin.Default()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"https://olimpo.vercel.app",
@@ -123,8 +123,8 @@ func main() {
 	}))
 
 	// Ruta raíz
-	r.GET("/", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+    r.GET("/", func(c *gin.Context) {
+        c.JSON(200, gin.H{
 			"message": "API de Olimpo Vicedecanatura",
 			"status":  "online",
 			"db":      "connected",
@@ -204,7 +204,7 @@ func main() {
 		api.DELETE("/equivalences/:id", deleteEquivalence)
 	}
 
-	// Endpoint para doble titulación
+	// Endpoint para doble titulación - REESCRITO PARA USAR LA MISMA LÓGICA EXITOSA DE CAMBIO DE CARRERA
 	r.POST("/api/doble-titulacion", func(c *gin.Context) {
 		var req models.DobleTitulacionInput
 		contentType := c.GetHeader("Content-Type")
@@ -226,57 +226,95 @@ func main() {
 			return
 		}
 
-		// Preprocesar y parsear ambos textos igual que en cambio de carrera
+		fmt.Printf("[DEBUG DOBLE TITULACION] Iniciando procesamiento...\n")
+		fmt.Printf("[DEBUG DOBLE TITULACION] Carrera objetivo: %s\n", req.CodigoCarreraObjetivo)
+
+		// ===== USAR EXACTAMENTE EL MISMO FLUJO EXITOSO DE CAMBIO DE CARRERA =====
+
+		// 1. Preprocesar ambas historias usando el mismo preprocesador exitoso
 		cleanedOrigen := preprocessAcademicHistoryText(req.HistoriaOrigen)
 		cleanedDoble := preprocessAcademicHistoryText(req.HistoriaDoble)
 
+		// 2. Parsear ambas historias usando el mismo parser exitoso
 		parsedOrigen, err := parseAcademicHistoryTextFlexible(cleanedOrigen)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia_origen: " + err.Error()})
 			return
 		}
+		
 		parsedDoble, err := parseAcademicHistoryTextFlexible(cleanedDoble)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia_doble: " + err.Error()})
 			return
 		}
 
-		// Convertir a SubjectInput
-		materiasOrigen := make([]models.SubjectInput, 0, len(parsedOrigen))
+		// 3. Convertir ambos resultados parseados a SubjectInput (formato estándar exitoso)
+		var materiasOrigen []models.SubjectInput
+		var materiasDoble []models.SubjectInput
+		
+		// Convertir materias de origen
 		for _, ps := range parsedOrigen {
-			materiasOrigen = append(materiasOrigen, models.SubjectInput{
+			subject := models.SubjectInput{
 				Code:     strings.TrimSpace(ps.Code),
-				Name:     ps.Name,
+				Name:     strings.TrimSpace(ps.Name),
 				Credits:  ps.Credits,
 				Type:     models.TipologiaAsignatura(ps.Type),
 				Grade:    ps.Grade,
 				Status:   ps.Status,
 				Semester: ps.Semester,
-			})
+			}
+			materiasOrigen = append(materiasOrigen, subject)
+			fmt.Printf("[DEBUG DOBLE TITULACION] Materia origen parseada: %s (%s) - %d créditos - Tipo: %s\n", 
+				subject.Name, subject.Code, subject.Credits, string(subject.Type))
 		}
-		materiasDoble := make([]models.SubjectInput, 0, len(parsedDoble))
+		
+		// Convertir materias de doble titulación
 		for _, ps := range parsedDoble {
-			materiasDoble = append(materiasDoble, models.SubjectInput{
+			subject := models.SubjectInput{
 				Code:     strings.TrimSpace(ps.Code),
-				Name:     ps.Name,
+				Name:     strings.TrimSpace(ps.Name),
 				Credits:  ps.Credits,
 				Type:     models.TipologiaAsignatura(ps.Type),
 				Grade:    ps.Grade,
 				Status:   ps.Status,
 				Semester: ps.Semester,
-			})
+			}
+			materiasDoble = append(materiasDoble, subject)
+			fmt.Printf("[DEBUG DOBLE TITULACION] Materia doble parseada: %s (%s) - %d créditos - Tipo: %s\n", 
+				subject.Name, subject.Code, subject.Credits, string(subject.Type))
 		}
 
-		// Realizar la comparación de doble titulación usando las materias parseadas
-		resultado, err := functions.CompareDobleTitulacionParsed(config.DB, materiasOrigen, materiasDoble, req.CodigoCarreraObjetivo)
+		fmt.Printf("[DEBUG DOBLE TITULACION] Materias origen parseadas: %d\n", len(materiasOrigen))
+		fmt.Printf("[DEBUG DOBLE TITULACION] Materias doble parseadas: %d\n", len(materiasDoble))
+
+		// 4. Usar la nueva función específica para doble titulación que maneja equivalencias correctamente
+		result, err := functions.CompareDobleTitulacionCombinada(config.DB, materiasOrigen, materiasDoble, req.CodigoCarreraObjetivo)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
+		// 5. Obtener información del plan de estudio (igual que cambio de carrera)
+		studyPlan, _ := functions.GetStudyPlanByCareerCode(config.DB, req.CodigoCarreraObjetivo)
+
+		// 6. Retornar EXACTAMENTE el mismo formato exitoso que cambio de carrera
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"resultado": resultado,
+			"comparison_resultado": result,
+			"study_plan_info": gin.H{
+				"id":      studyPlan.ID,
+				"version": studyPlan.Version,
+				"career":  studyPlan.Career.Name,
+			},
+			"summary": gin.H{
+				"total_subjects_parsed_origen": len(parsedOrigen),
+				"total_subjects_parsed_doble":  len(parsedDoble),
+				"total_subjects_in_plan":       len(result.EquivalentSubjects) + len(result.MissingSubjects),
+				"homologable_subjects":         len(result.EquivalentSubjects),
+				"homologable_credits":          result.TotalCredits,
+				"missing_subjects":             len(result.MissingSubjects),
+				"missing_credits":              result.MissingCredits,
+				"homologation_percentage":      calculateCompletionPercentage(result.CreditsSummary),
+			},
 		})
 	})
 
@@ -615,21 +653,26 @@ type ParsedSubject struct {
 
 // Parser alternativo más flexible para historia académica
 func parseAcademicHistoryTextFlexible(text string) ([]ParsedSubject, error) {
-	fmt.Println("[DEBUG] Usando parser flexible")
+	fmt.Println("[DEBUG PARSER] Usando parser flexible")
 	fmt.Println("=== INICIO DEL TEXTO ===")
 	fmt.Println(text)
 	fmt.Println("=== FIN DEL TEXTO ===")
+	fmt.Printf("[DEBUG PARSER] Longitud del texto: %d caracteres\n", len(text))
 	
 	lines := strings.Split(text, "\n")
+	fmt.Printf("[DEBUG PARSER] Total líneas después de split: %d\n", len(lines))
+	
 	var subjects []ParsedSubject
 	
-	// Buscar patrones de materias en el texto
-	// Patrón 1: Código entre paréntesis al inicio de línea
-	codePattern := regexp.MustCompile(`^([^(]+)\s*\(([^)]+)\)`)
-	// Patrón 2: Línea que contiene créditos (número)
+	// Patrones mejorados
+	// Patrón 1: Código entre paréntesis - captura mejor el nombre y código
+	codePattern := regexp.MustCompile(`^(.+?)\s*\(([^)]+)\)\s*$`)
+	// Patrón 2: Línea que contiene solo créditos (número)
 	creditsPattern := regexp.MustCompile(`^\s*(\d+)\s*$`)
-	// Patrón 3: Línea que contiene calificación (número decimal)
-	gradePattern := regexp.MustCompile(`^\s*(\d+\.?\d*)\s*$`)
+	// Patrón 3: Para limpiar nombres que tienen prefijos como "4APROBADA", "7APROBADA", etc. - MEJORADO
+	nameCleanPattern := regexp.MustCompile(`^(\d+)?APROBAD?A?(.+)$`)
+	// Patrón 4: Para casos más complejos como "7APROBADAEstadística I"
+	complexNameCleanPattern := regexp.MustCompile(`^(\d+[A-Z]+)(.+)$`)
 	
 	var currentSubject *ParsedSubject
 	var lineCount int
@@ -637,115 +680,224 @@ func parseAcademicHistoryTextFlexible(text string) ([]ParsedSubject, error) {
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
+			fmt.Printf("[DEBUG PARSER] Línea %d: vacía, saltando\n", i+1)
 			continue
 		}
 		
-		fmt.Printf("[DEBUG] Procesando línea %d: '%s'\n", i+1, line)
+		fmt.Printf("[DEBUG PARSER] Procesando línea %d: '%s'\n", i+1, line)
 		
 		// Si encontramos un código de materia, empezar nueva materia
 		if match := codePattern.FindStringSubmatch(line); match != nil {
 			if currentSubject != nil {
 				// Guardar la materia anterior si existe
+				fmt.Printf("[DEBUG PARSER] Guardando materia anterior: %s (%s)\n", currentSubject.Name, currentSubject.Code)
 				subjects = append(subjects, *currentSubject)
 			}
 			
 			name := strings.TrimSpace(match[1])
 			code := strings.TrimSpace(match[2])
 			
+			fmt.Printf("[DEBUG PARSER] COINCIDENCIA CÓDIGO: nombre='%s', código='%s'\n", name, code)
+			
+			// Limpiar el nombre si tiene prefijos problemáticos - LÓGICA MEJORADA
+			originalName := name
+			if cleanMatch := nameCleanPattern.FindStringSubmatch(name); cleanMatch != nil {
+				name = strings.TrimSpace(cleanMatch[2])
+				fmt.Printf("[DEBUG PARSER] Nombre limpiado con patrón básico de '%s' a '%s'\n", originalName, name)
+			} else if cleanMatch := complexNameCleanPattern.FindStringSubmatch(name); cleanMatch != nil {
+				// Verificar si el prefijo contiene "APROBADA" o similar
+				prefix := cleanMatch[1]
+				if strings.Contains(strings.ToUpper(prefix), "APROBAD") {
+					name = strings.TrimSpace(cleanMatch[2])
+					fmt.Printf("[DEBUG PARSER] Nombre limpiado con patrón complejo de '%s' a '%s'\n", originalName, name)
+				}
+			}
+			
 			currentSubject = &ParsedSubject{
 				Code:     code,
 				Name:     name,
 				Status:   "APROBADA",
 				Credits:  0,
-				Grade:    0.0,
+				Grade:    0.0, // No procesaremos calificaciones por ahora
 				Type:     "",
 				Semester: "",
 			}
 			lineCount = 0
-			fmt.Printf("[DEBUG] Nueva materia encontrada: %s (%s)\n", name, code)
+			fmt.Printf("[DEBUG PARSER] Nueva materia creada: %s (%s)\n", name, code)
 			continue
+		} else {
+			fmt.Printf("[DEBUG PARSER] Línea NO coincide con patrón de código\n")
 		}
 		
 		// Si tenemos una materia en progreso, procesar las líneas siguientes
 		if currentSubject != nil {
 			lineCount++
+			fmt.Printf("[DEBUG PARSER] Procesando línea %d para materia '%s'\n", lineCount, currentSubject.Name)
 			
 			switch lineCount {
 			case 1: // Créditos
 				if match := creditsPattern.FindStringSubmatch(line); match != nil {
 					if credits, err := strconv.Atoi(match[1]); err == nil {
 						currentSubject.Credits = credits
-						fmt.Printf("[DEBUG] Créditos: %d\n", credits)
+						fmt.Printf("[DEBUG PARSER] Créditos asignados: %d\n", credits)
 					}
+				} else {
+					fmt.Printf("[DEBUG PARSER] Línea NO coincide con patrón de créditos: '%s'\n", line)
 				}
 			case 2: // Tipo
 				currentSubject.Type = line
-				fmt.Printf("[DEBUG] Tipo: %s\n", line)
+				fmt.Printf("[DEBUG PARSER] Tipo asignado: %s\n", line)
 			case 3: // Período
 				currentSubject.Semester = line
-				fmt.Printf("[DEBUG] Período: %s\n", line)
-			case 4: // Calificación
-				if match := gradePattern.FindStringSubmatch(line); match != nil {
-					if grade, err := strconv.ParseFloat(match[1], 64); err == nil {
-						currentSubject.Grade = grade
-						fmt.Printf("[DEBUG] Calificación: %.1f\n", grade)
-					}
-				}
-				// Después de procesar la calificación, guardar la materia
+				fmt.Printf("[DEBUG PARSER] Período asignado: %s\n", line)
+				// Después de procesar el período, guardar la materia (saltamos calificación)
+				fmt.Printf("[DEBUG PARSER] Guardando materia completa: %s (%s) - %d créditos - %s\n", currentSubject.Name, currentSubject.Code, currentSubject.Credits, currentSubject.Type)
 				subjects = append(subjects, *currentSubject)
 				currentSubject = nil
 				lineCount = 0
 			}
+		} else {
+			fmt.Printf("[DEBUG PARSER] No hay materia actual, línea ignorada\n")
 		}
 	}
 	
 	// Guardar la última materia si existe
 	if currentSubject != nil {
+		fmt.Printf("[DEBUG PARSER] Guardando última materia: %s (%s)\n", currentSubject.Name, currentSubject.Code)
 		subjects = append(subjects, *currentSubject)
 	}
 	
-	fmt.Printf("[DEBUG] Total materias parseadas (flexible): %d\n", len(subjects))
+	fmt.Printf("[DEBUG PARSER] === RESULTADO PARSING ===\n")
+	fmt.Printf("[DEBUG PARSER] Total materias parseadas: %d\n", len(subjects))
+	for i, subject := range subjects {
+		fmt.Printf("[DEBUG PARSER] Materia %d: %s (%s) - %d créditos - %s\n", i+1, subject.Name, subject.Code, subject.Credits, subject.Type)
+	}
+	
 	return subjects, nil
+}
+
+// mapearTipologiaCompleta convierte las tipologías del texto parseado a TipologiaAsignatura
+func mapearTipologiaCompleta(tipo string) models.TipologiaAsignatura {
+	tipo = strings.ToUpper(strings.TrimSpace(tipo))
+	
+	switch {
+	case strings.Contains(tipo, "FUNDAMENTACIÓN OBLIGATORIA") || strings.Contains(tipo, "FUND. OBLIGATORIA") || strings.Contains(tipo, "FUND OBLIGATORIA"):
+		return models.TipologiaFundamentalObligatoria
+	case strings.Contains(tipo, "FUNDAMENTACIÓN OPTATIVA") || strings.Contains(tipo, "FUND. OPTATIVA") || strings.Contains(tipo, "FUND OPTATIVA"):
+		return models.TipologiaFundamentalOptativa
+	case strings.Contains(tipo, "DISCIPLINAR OBLIGATORIA"):
+		return models.TipologiaDisciplinarObligatoria
+	case strings.Contains(tipo, "DISCIPLINAR OPTATIVA"):
+		return models.TipologiaDisciplinarOptativa
+	case strings.Contains(tipo, "LIBRE ELECCIÓN") || strings.Contains(tipo, "LIBRE ELECCION"):
+		return models.TipologiaLibreEleccion
+	case strings.Contains(tipo, "TRABAJO DE GRADO"):
+		return models.TipologiaTrabajoGrado
+	case strings.Contains(tipo, "NIVELACIÓN") || strings.Contains(tipo, "NIVELACION"):
+		return models.TipologiaLibreEleccion // Mapear nivelación como libre elección
+	default:
+		// Si no coincide con ninguno, intentar usar el validador existente
+		if ValidarTipologia(tipo) {
+			return models.TipologiaAsignatura(tipo)
+		}
+		return models.TipologiaLibreEleccion // Por defecto
+	}
 }
 
 // Limpieza y normalización del texto de historia académica
 func preprocessAcademicHistoryText(raw string) string {
-	// 1. Reemplazar saltos de línea de Windows por Unix
-	cleaned := strings.ReplaceAll(raw, "\r\n", "\n")
-	cleaned = strings.ReplaceAll(cleaned, "\r", "\n")
-
-	// 2. Insertar salto de línea antes de cada materia (NOMBRE (CÓDIGO))
-	// Esto detecta patrones como: Nombre de materia (código)
-	cleaned = regexp.MustCompile(`([A-Za-zÁÉÍÓÚÑáéíóúüÜ0-9\- ]+\([0-9A-Z\-]+\))`).ReplaceAllString(cleaned, "\n$1")
-
-	// 3. Insertar salto de línea antes de cada número de créditos (1 o 2 dígitos)
-	cleaned = regexp.MustCompile(`([A-Za-zÁÉÍÓÚÑáéíóúüÜ)]+)(\d{1,2})F`).ReplaceAllString(cleaned, "$1\n$2F")
-	// Y también antes de cada número de créditos suelto
-	cleaned = regexp.MustCompile(`([A-Za-zÁÉÍÓÚÑáéíóúüÜ)]+)(\d{1,2})\b`).ReplaceAllString(cleaned, "$1\n$2")
-
-	// 4. Insertar salto de línea antes de cada tipo de materia
-	cleaned = regexp.MustCompile(`(\d{1,2})((FUND\. OBLIGATORIA|FUND\. OPTATIVA|DISCIPLINAR OBLIGATORIA|DISCIPLINAR OPTATIVA|LIBRE ELECCIÓN|NIVELACIÓN|TRABAJO DE GRADO))`).ReplaceAllString(cleaned, "$1\n$2")
-
-	// 5. Insertar salto de línea antes de cada periodo (año-semestre)
-	cleaned = regexp.MustCompile(`(OBLIGATORIA|OPTATIVA|ELECCIÓN|NIVELACIÓN|GRADO)(\d{4}-\dS|\d{4}-\dS|\d{4}-\d{1,2}S|\d{4}-\d{1,2})`).ReplaceAllString(cleaned, "$1\n$2")
-
-	// 6. Insertar salto de línea antes de cada calificación (número decimal)
-	cleaned = regexp.MustCompile(`(\d{4}-\dS|\d{4}-\d{1,2}S|\d{4}-\d{1,2})( Ordinaria)?([0-9]\.[0-9])`).ReplaceAllString(cleaned, "$1$2\n$3")
-
-	// 7. Insertar salto de línea antes de cada "APROBADA" o "APROBAD" (por si hay variantes)
-	cleaned = regexp.MustCompile(`([0-9]\.[0-9])((APROBADA|APROBAD))`).ReplaceAllString(cleaned, "$1\n$2")
-
-	// 8. Reemplazar múltiples saltos de línea por uno solo
-	cleaned = regexp.MustCompile(`\n+`).ReplaceAllString(cleaned, "\n")
-	// 9. Quitar espacios en blanco al inicio y final de cada línea
-	lines := strings.Split(cleaned, "\n")
+	fmt.Printf("[DEBUG PREPROCESSOR] === INICIANDO PREPROCESAMIENTO ===\n")
+	fmt.Printf("[DEBUG PREPROCESSOR] Texto original longitud: %d\n", len(raw))
+	
+	// Patrón para detectar líneas de materias válidas
+	// Formato: Nombre (Código) \t Créditos \t Tipo \t Periodo \t Calificación+APROBADA
+	materiaPattern := regexp.MustCompile(`([^(\n\r\t]+)\s*\(([^)]+)\)\s+(\d+)\s+(FUND\.|DISCIPLINAR|LIBRE|TRABAJO|NIVELACIÓN)[^A-Z]*([A-Z\s]+?)\s+(\d{4}-\d+S?\s+[^0-9]*)\s*([0-9]+\.?[0-9]*)?[A-Z]*APROBADA?`)
+	
+	lines := strings.Split(raw, "\n")
+	var validLines []string
+	
+	fmt.Printf("[DEBUG PREPROCESSOR] Procesando %d líneas...\n", len(lines))
+	
 	for i, line := range lines {
-		lines[i] = strings.TrimSpace(line)
+		// Limpiar la línea
+		cleanLine := strings.TrimSpace(line)
+		if cleanLine == "" {
+			continue
+		}
+		
+		fmt.Printf("[DEBUG PREPROCESSOR] Línea %d: '%s'\n", i+1, cleanLine)
+		
+		// Buscar coincidencias con el patrón de materia
+		if matches := materiaPattern.FindAllStringSubmatch(cleanLine, -1); len(matches) > 0 {
+			for _, match := range matches {
+				if len(match) >= 6 {
+					nombre := strings.TrimSpace(match[1])
+					codigo := strings.TrimSpace(match[2])
+					creditos := strings.TrimSpace(match[3])
+					tipoCompleto := strings.TrimSpace(match[4] + " " + match[5]) // Agregar espacio entre partes del tipo
+					calificacion := ""
+					if len(match) >= 8 && match[7] != "" {
+						calificacion = strings.TrimSpace(match[7])
+					}
+					
+					// Construir línea estructurada
+					validLine := fmt.Sprintf("%s (%s)\n%s\n%s", nombre, codigo, creditos, tipoCompleto)
+					if calificacion != "" {
+						validLine += "\n" + calificacion
+					}
+					validLine += "\nAPROBADA"
+					
+					validLines = append(validLines, validLine)
+					fmt.Printf("[DEBUG PREPROCESSOR] ✓ Materia extraída: %s (%s) - %s créditos\n", nombre, codigo, creditos)
+				}
+			}
+		} else {
+			// Intentar búsqueda más flexible
+			simplePattern := regexp.MustCompile(`([^(\n\r\t]+)\s*\(([A-Z0-9\-]+)\)\s+(\d+)\s+(.*?)APROBADA?`)
+			if matches := simplePattern.FindStringSubmatch(cleanLine); len(matches) >= 4 {
+				nombre := strings.TrimSpace(matches[1])
+				codigo := strings.TrimSpace(matches[2])
+				creditos := strings.TrimSpace(matches[3])
+				resto := strings.TrimSpace(matches[4])
+				
+				// Dividir el resto para extraer tipo y periodo
+				partes := strings.Fields(resto)
+				if len(partes) >= 2 {
+					// Los primeros campos probablemente sean el tipo
+					tipo := ""
+					
+					// Buscar el tipo (FUND., DISCIPLINAR, etc.)
+					for j, parte := range partes {
+						if strings.Contains(parte, "FUND") || strings.Contains(parte, "DISCIPLINAR") || strings.Contains(parte, "LIBRE") {
+							// Tomar hasta 3 palabras para el tipo
+							endIndex := j + 3
+							if endIndex > len(partes) {
+								endIndex = len(partes)
+							}
+							tipo = strings.Join(partes[j:endIndex], " ")
+							break
+						}
+					}
+					
+					if tipo != "" {
+						validLine := fmt.Sprintf("%s (%s)\n%s\n%s\nAPROBADA", nombre, codigo, creditos, tipo)
+						validLines = append(validLines, validLine)
+						fmt.Printf("[DEBUG PREPROCESSOR] ✓ Materia extraída (simple): %s (%s) - %s créditos\n", nombre, codigo, creditos)
+					}
+				}
+			} else {
+				fmt.Printf("[DEBUG PREPROCESSOR] ✗ Línea no coincide con patrones\n")
+			}
+		}
 	}
-	cleaned = strings.Join(lines, "\n")
-	// 10. Quitar espacios en blanco al inicio y final del texto
-	cleaned = strings.TrimSpace(cleaned)
-	return cleaned
+	
+	result := strings.Join(validLines, "\n\n")
+	
+	fmt.Printf("[DEBUG PREPROCESSOR] === RESULTADO ===\n")
+	fmt.Printf("[DEBUG PREPROCESSOR] Materias extraídas: %d\n", len(validLines))
+	fmt.Printf("[DEBUG PREPROCESSOR] Texto estructurado:\n%s\n", result)
+	
+	return result
 }
 
 // compareAcademicHistoryFromText compara historia académica en texto con el pensum

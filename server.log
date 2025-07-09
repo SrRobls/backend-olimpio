@@ -1,0 +1,319 @@
+2025/07/09 13:02:54 ✅ Conexión a la base de datos establecida exitosamente
+
+2025/07/09 13:02:54 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[441.335ms] [34;1m[rows:1][0m SELECT count(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND table_type = 'BASE TABLE'
+
+2025/07/09 13:02:54 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[286.697ms] [34;1m[rows:1][0m SELECT CURRENT_DATABASE()
+
+2025/07/09 13:02:55 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[431.764ms] [34;1m[rows:-][0m SELECT c.column_name, c.is_nullable = 'YES', c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_precision_radix, c.numeric_scale, c.datetime_precision, 8 * typlen, c.column_default, pd.description, c.identity_increment FROM information_schema.columns AS c JOIN pg_type AS pgt ON c.udt_name = pgt.typname LEFT JOIN pg_catalog.pg_description as pd ON pd.objsubid = c.ordinal_position AND pd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema)) where table_catalog = 'postgres' AND table_schema = CURRENT_SCHEMA() AND table_name = 'careers'
+
+2025/07/09 13:02:55 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[127.476ms] [34;1m[rows:-][0m SELECT * FROM "careers" LIMIT 1
+
+2025/07/09 13:02:55 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[450.856ms] [34;1m[rows:-][0m SELECT constraint_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'careers' AND constraint_type = 'UNIQUE'
+
+2025/07/09 13:02:56 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[458.859ms] [34;1m[rows:-][0m SELECT c.column_name, constraint_name, constraint_type FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'careers'
+
+2025/07/09 13:02:56 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[469.240ms] [34;1m[rows:-][0m SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type
+		FROM pg_attribute a JOIN pg_class b ON a.attrelid = b.oid AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA())
+		WHERE a.attnum > 0 -- hide internal columns
+		AND NOT a.attisdropped -- hide deleted columns
+		AND b.relname = 'careers'
+
+2025/07/09 13:02:57 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[330.563ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND column_name = 'id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'careers' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:57 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[157.060ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND column_name = 'name') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'careers' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:57 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[241.174ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND column_name = 'code') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'careers' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:57 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[121.795ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND column_name = 'description') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'careers' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:57 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[122.378ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND column_name = 'created_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'careers' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:57 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[117.362ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'careers' AND column_name = 'updated_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'careers' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:58 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[139.477ms] [34;1m[rows:1][0m SELECT count(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND table_type = 'BASE TABLE'
+
+2025/07/09 13:02:58 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[140.812ms] [34;1m[rows:1][0m SELECT CURRENT_DATABASE()
+
+2025/07/09 13:02:58 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[160.411ms] [34;1m[rows:-][0m SELECT c.column_name, c.is_nullable = 'YES', c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_precision_radix, c.numeric_scale, c.datetime_precision, 8 * typlen, c.column_default, pd.description, c.identity_increment FROM information_schema.columns AS c JOIN pg_type AS pgt ON c.udt_name = pgt.typname LEFT JOIN pg_catalog.pg_description as pd ON pd.objsubid = c.ordinal_position AND pd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema)) where table_catalog = 'postgres' AND table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans'
+
+2025/07/09 13:02:58 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[116.279ms] [34;1m[rows:-][0m SELECT * FROM "study_plans" LIMIT 1
+
+2025/07/09 13:02:58 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[161.911ms] [34;1m[rows:-][0m SELECT constraint_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'study_plans' AND constraint_type = 'UNIQUE'
+
+2025/07/09 13:02:58 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[199.572ms] [34;1m[rows:-][0m SELECT c.column_name, constraint_name, constraint_type FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'study_plans'
+
+2025/07/09 13:02:59 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[231.929ms] [34;1m[rows:-][0m SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type
+		FROM pg_attribute a JOIN pg_class b ON a.attrelid = b.oid AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA())
+		WHERE a.attnum > 0 -- hide internal columns
+		AND NOT a.attisdropped -- hide deleted columns
+		AND b.relname = 'study_plans'
+
+2025/07/09 13:02:59 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[165.912ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:59 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[161.682ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'career_id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:59 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[119.619ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'version') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:59 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[284.305ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'is_active') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:02:59 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[153.833ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'created_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:00 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[159.682ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'updated_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:00 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[282.015ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'total_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:00 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[162.348ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'foundational_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:00 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[118.884ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'disciplinary_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:00 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[117.468ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'elective_credits_percentage') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:00 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[198.770ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'fund_obligatoria_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:01 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[167.774ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'fund_optativa_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:01 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[263.762ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'dis_obligatoria_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:01 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[169.768ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'dis_optativa_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:01 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[159.847ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND column_name = 'libre_credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plans' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:02 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[336.823ms] [34;1m[rows:1][0m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plans' AND constraint_name = 'fk_careers_study_plans'
+
+2025/07/09 13:03:02 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[141.890ms] [34;1m[rows:1][0m SELECT count(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND table_type = 'BASE TABLE'
+
+2025/07/09 13:03:02 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[161.564ms] [34;1m[rows:1][0m SELECT CURRENT_DATABASE()
+
+2025/07/09 13:03:02 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[363.084ms] [34;1m[rows:-][0m SELECT c.column_name, c.is_nullable = 'YES', c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_precision_radix, c.numeric_scale, c.datetime_precision, 8 * typlen, c.column_default, pd.description, c.identity_increment FROM information_schema.columns AS c JOIN pg_type AS pgt ON c.udt_name = pgt.typname LEFT JOIN pg_catalog.pg_description as pd ON pd.objsubid = c.ordinal_position AND pd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema)) where table_catalog = 'postgres' AND table_schema = CURRENT_SCHEMA() AND table_name = 'subjects'
+
+2025/07/09 13:03:02 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[153.443ms] [34;1m[rows:-][0m SELECT * FROM "subjects" LIMIT 1
+
+2025/07/09 13:03:03 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[323.255ms] [34;1m[rows:-][0m SELECT constraint_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'subjects' AND constraint_type = 'UNIQUE'
+
+2025/07/09 13:03:03 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[136.373ms] [34;1m[rows:-][0m SELECT c.column_name, constraint_name, constraint_type FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'subjects'
+
+2025/07/09 13:03:03 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[339.865ms] [34;1m[rows:-][0m SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type
+		FROM pg_attribute a JOIN pg_class b ON a.attrelid = b.oid AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA())
+		WHERE a.attnum > 0 -- hide internal columns
+		AND NOT a.attisdropped -- hide deleted columns
+		AND b.relname = 'subjects'
+
+2025/07/09 13:03:03 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[166.447ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[154.662ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'code') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[122.892ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'name') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[154.460ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'credits') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[289.936ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'type') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[112.638ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'description') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[119.631ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'created_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:04 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[159.935ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'subjects' AND column_name = 'updated_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:05 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[219.749ms] [34;1m[rows:1][0m SELECT count(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plan_subjects' AND table_type = 'BASE TABLE'
+
+2025/07/09 13:03:05 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[138.009ms] [34;1m[rows:1][0m SELECT CURRENT_DATABASE()
+
+2025/07/09 13:03:05 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[123.963ms] [34;1m[rows:-][0m SELECT c.column_name, c.is_nullable = 'YES', c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_precision_radix, c.numeric_scale, c.datetime_precision, 8 * typlen, c.column_default, pd.description, c.identity_increment FROM information_schema.columns AS c JOIN pg_type AS pgt ON c.udt_name = pgt.typname LEFT JOIN pg_catalog.pg_description as pd ON pd.objsubid = c.ordinal_position AND pd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema)) where table_catalog = 'postgres' AND table_schema = CURRENT_SCHEMA() AND table_name = 'study_plan_subjects'
+
+2025/07/09 13:03:05 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[154.739ms] [34;1m[rows:-][0m SELECT * FROM "study_plan_subjects" LIMIT 1
+
+2025/07/09 13:03:05 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[165.104ms] [34;1m[rows:-][0m SELECT constraint_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'study_plan_subjects' AND constraint_type = 'UNIQUE'
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[242.378ms] [34;1m[rows:-][0m SELECT c.column_name, constraint_name, constraint_type FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'study_plan_subjects'
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[114.540ms] [34;1m[rows:-][0m SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type
+		FROM pg_attribute a JOIN pg_class b ON a.attrelid = b.oid AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA())
+		WHERE a.attnum > 0 -- hide internal columns
+		AND NOT a.attisdropped -- hide deleted columns
+		AND b.relname = 'study_plan_subjects'
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[121.178ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plan_subjects' AND column_name = 'subject_id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plan_subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[159.630ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plan_subjects' AND column_name = 'study_plan_id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'study_plan_subjects' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[242.346ms] [34;1m[rows:1][0m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plan_subjects' AND constraint_name = 'fk_study_plan_subjects_subject'
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[118.396ms] [34;1m[rows:1][0m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'study_plan_subjects' AND constraint_name = 'fk_study_plan_subjects_study_plan'
+
+2025/07/09 13:03:06 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[126.379ms] [34;1m[rows:1][0m SELECT count(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND table_type = 'BASE TABLE'
+
+2025/07/09 13:03:07 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[262.282ms] [34;1m[rows:1][0m SELECT CURRENT_DATABASE()
+
+2025/07/09 13:03:07 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[171.331ms] [34;1m[rows:-][0m SELECT c.column_name, c.is_nullable = 'YES', c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_precision_radix, c.numeric_scale, c.datetime_precision, 8 * typlen, c.column_default, pd.description, c.identity_increment FROM information_schema.columns AS c JOIN pg_type AS pgt ON c.udt_name = pgt.typname LEFT JOIN pg_catalog.pg_description as pd ON pd.objsubid = c.ordinal_position AND pd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema)) where table_catalog = 'postgres' AND table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences'
+
+2025/07/09 13:03:07 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[157.826ms] [34;1m[rows:-][0m SELECT * FROM "equivalences" LIMIT 1
+
+2025/07/09 13:03:07 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[277.200ms] [34;1m[rows:-][0m SELECT constraint_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'equivalences' AND constraint_type = 'UNIQUE'
+
+2025/07/09 13:03:07 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[182.316ms] [34;1m[rows:-][0m SELECT c.column_name, constraint_name, constraint_type FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'postgres' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'equivalences'
+
+2025/07/09 13:03:08 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[146.558ms] [34;1m[rows:-][0m SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type
+		FROM pg_attribute a JOIN pg_class b ON a.attrelid = b.oid AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA())
+		WHERE a.attnum > 0 -- hide internal columns
+		AND NOT a.attisdropped -- hide deleted columns
+		AND b.relname = 'equivalences'
+
+2025/07/09 13:03:08 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[314.386ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:08 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[183.747ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'source_subject_id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:08 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[133.158ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'target_subject_id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:08 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[145.190ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'type') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:09 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[137.028ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'notes') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:09 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[267.234ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'career_id') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:09 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[157.343ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'created_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:09 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[174.796ms] [34;1m[rows:0][0m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND column_name = 'updated_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'equivalences' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))
+
+2025/07/09 13:03:09 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[193.206ms] [34;1m[rows:1][0m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND constraint_name = 'fk_subjects_equivalences'
+
+2025/07/09 13:03:10 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[176.738ms] [34;1m[rows:1][0m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND constraint_name = 'fk_equivalences_target_subject'
+
+2025/07/09 13:03:10 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:13
+[0m[33m[157.072ms] [34;1m[rows:1][0m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'equivalences' AND constraint_name = 'fk_equivalences_career'
+
+2025/07/09 13:03:10 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:26
+[0m[33m[431.202ms] [34;1m[rows:1][0m SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'equivalences' AND column_name = 'study_plan_id')
+
+2025/07/09 13:03:10 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:59
+[0m[33m[163.300ms] [34;1m[rows:0][0m CREATE INDEX IF NOT EXISTS idx_subjects_code ON subjects(code);
+
+2025/07/09 13:03:10 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:63
+[0m[33m[158.908ms] [34;1m[rows:0][0m CREATE INDEX IF NOT EXISTS idx_careers_code ON careers(code);
+
+2025/07/09 13:03:11 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:68
+[0m[33m[132.839ms] [34;1m[rows:0][0m CREATE INDEX IF NOT EXISTS idx_equivalences_career_id ON equivalences(career_id);
+
+2025/07/09 13:03:11 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:72
+[0m[33m[183.515ms] [34;1m[rows:0][0m CREATE INDEX IF NOT EXISTS idx_equivalences_source_subject_id ON equivalences(source_subject_id);
+
+2025/07/09 13:03:11 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:76
+[0m[33m[163.415ms] [34;1m[rows:0][0m CREATE INDEX IF NOT EXISTS idx_equivalences_target_subject_id ON equivalences(target_subject_id);
+2025/07/09 13:03:11 ✅ Migraciones ejecutadas exitosamente
+
+2025/07/09 13:03:11 [32m/home/johanrobles/Documentos/Respositorios/Olimpo-Vicedecanatura/database/migrations.go:85
+[0m[33m[279.893ms] [34;1m[rows:1][0m SELECT count(*) FROM "careers"
+2025/07/09 13:03:11 La base de datos ya contiene datos iniciales
+2025/07/09 13:03:11 ✅ Datos iniciales cargados (si era necesario)
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /                         --> main.main.func1 (4 handlers)
+[GIN-debug] GET    /api/careers              --> main.getCareers (4 handlers)
+[GIN-debug] GET    /api/careers/:code/study-plans --> main.getStudyPlansByCareer (4 handlers)
+[GIN-debug] GET    /api/study-plans/:id      --> main.getStudyPlanDetails (4 handlers)
+[GIN-debug] POST   /api/compare              --> main.compareAcademicHistory (4 handlers)
+[GIN-debug] POST   /api/compare-by-career    --> main.compareByCareerCode (4 handlers)
+[GIN-debug] POST   /api/api-compare          --> main.compareAcademicHistoryFromText (4 handlers)
+[GIN-debug] POST   /api/careers              --> main.createCareer (4 handlers)
+[GIN-debug] POST   /api/study-plans          --> main.createStudyPlan (4 handlers)
+[GIN-debug] POST   /api/subjects             --> main.createSubject (4 handlers)
+[GIN-debug] POST   /api/complete-study-plan  --> main.createCompleteStudyPlan (4 handlers)
+[GIN-debug] GET    /api/subjects             --> main.getAllSubjects (4 handlers)
+[GIN-debug] GET    /api/equivalences         --> main.getEquivalences (4 handlers)
+[GIN-debug] GET    /api/careers/:code/equivalences --> main.getEquivalencesByCareer (4 handlers)
+[GIN-debug] GET    /api/equivalences/:id     --> main.getEquivalenceByID (4 handlers)
+[GIN-debug] POST   /api/equivalences         --> main.createEquivalence (4 handlers)
+[GIN-debug] PUT    /api/equivalences/:id     --> main.updateEquivalence (4 handlers)
+[GIN-debug] PUT    /api/equivalences/:id/source-subject --> main.updateEquivalenceSourceSubject (4 handlers)
+[GIN-debug] DELETE /api/equivalences/:id     --> main.deleteEquivalence (4 handlers)
+[GIN-debug] POST   /api/doble-titulacion     --> main.main.func2 (4 handlers)
+2025/07/09 13:03:11 🚀 Servidor iniciado en http://localhost:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies for details.
+[GIN-debug] Environment variable PORT is undefined. Using port :8080 by default
+[GIN-debug] Listening and serving HTTP on :8080
+[GIN-debug] [ERROR] listen tcp :8080: bind: address already in use
+2025/07/09 13:03:11 Error iniciando el servidor: listen tcp :8080: bind: address already in use
+exit status 1

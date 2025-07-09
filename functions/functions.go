@@ -54,15 +54,18 @@ func CompareAcademicHistoryWithStudyPlan(db *gorm.DB, academicHistory models.Aca
 	for _, historySubject := range academicHistory.Subjects {
 		// Asumir que todas las materias en la historia académica están aprobadas
 		// ya que están en la historia académica del estudiante
-		approvedSubjects[strings.TrimSpace(historySubject.Code)] = true
+		cleanCode := strings.TrimSpace(historySubject.Code)
+		approvedSubjects[cleanCode] = true
+		fmt.Printf("[DEBUG COMPARACION] Materia aprobada agregada: %s (%s)\n", historySubject.Name, cleanCode)
 	}
-	fmt.Printf("[DEBUG] Materias aprobadas en historia académica: %+v\n", approvedSubjects)
-	fmt.Printf("[DEBUG] Materias del plan: ")
+	fmt.Printf("[DEBUG COMPARACION] Total materias aprobadas: %d\n", len(approvedSubjects))
+	fmt.Printf("[DEBUG COMPARACION] Materias aprobadas en historia académica: %+v\n", approvedSubjects)
+	fmt.Printf("[DEBUG COMPARACION] Materias del plan: ")
 	for _, planSubject := range studyPlan.Subjects {
 		fmt.Printf("%s, ", planSubject.Code)
 	}
 	fmt.Println()
-	fmt.Printf("[DEBUG] Equivalencias cargadas: %+v\n", equivalenceMap)
+	fmt.Printf("[DEBUG COMPARACION] Equivalencias cargadas: %+v\n", equivalenceMap)
 
 	// 5. Determinar qué materias del plan están aprobadas (directa o por equivalencia)
 	var equivalentSubjects []models.SubjectResult
@@ -80,12 +83,17 @@ func CompareAcademicHistoryWithStudyPlan(db *gorm.DB, academicHistory models.Aca
 		isApproved := false
 		var equivalenceInfo *models.EquivalenceResult
 
+		fmt.Printf("[DEBUG COMPARACION] === Verificando materia del plan: %s (%s) ===\n", planSubject.Name, planSubject.Code)
+		
 		// Verificar si está aprobada directamente
 		if approvedSubjects[planSubject.Code] {
 			isApproved = true
+			fmt.Printf("[DEBUG COMPARACION] ✅ ENCONTRADA directamente: %s (%s)\n", planSubject.Name, planSubject.Code)
 		} else {
+			fmt.Printf("[DEBUG COMPARACION] ❌ NO encontrada directamente: %s (%s)\n", planSubject.Name, planSubject.Code)
 			// Verificar si está aprobada por equivalencia
 			if equivalentCodes, hasEquivalences := equivalenceMap[planSubject.Code]; hasEquivalences {
+				fmt.Printf("[DEBUG COMPARACION] Verificando equivalencias para %s: %v\n", planSubject.Code, equivalentCodes)
 				for _, equivCode := range equivalentCodes {
 					if approvedSubjects[equivCode] {
 						isApproved = true
@@ -93,9 +101,14 @@ func CompareAcademicHistoryWithStudyPlan(db *gorm.DB, academicHistory models.Aca
 							Type:  "total", // Asumimos equivalencia total por simplicidad
 							Notes: "Aprobada por equivalencia con " + equivCode,
 						}
+						fmt.Printf("[DEBUG COMPARACION] ✅ ENCONTRADA por equivalencia: %s (%s) → %s\n", planSubject.Name, planSubject.Code, equivCode)
 						break
+					} else {
+						fmt.Printf("[DEBUG COMPARACION] ❌ Equivalencia %s no encontrada en historial\n", equivCode)
 					}
 				}
+			} else {
+				fmt.Printf("[DEBUG COMPARACION] ❌ No hay equivalencias definidas para %s\n", planSubject.Code)
 			}
 		}
 
@@ -110,7 +123,24 @@ func CompareAcademicHistoryWithStudyPlan(db *gorm.DB, academicHistory models.Aca
 		if isApproved {
 			subjectResult.Status = "APROBADA"
 			equivalentSubjects = append(equivalentSubjects, subjectResult)
-			creditsByType[string(planSubject.Type)] += planSubject.Credits
+			
+			// CORREGIR EL MAPEO DE TIPOS PARA CONTAR CRÉDITOS CORRECTAMENTE
+			typeKey := strings.ToLower(strings.ReplaceAll(string(planSubject.Type), " ", "."))
+			if strings.Contains(typeKey, "fund") && strings.Contains(typeKey, "obligatoria") {
+				typeKey = "fund.obligatoria"
+			} else if strings.Contains(typeKey, "fund") && strings.Contains(typeKey, "optativa") {
+				typeKey = "fund.optativa"
+			} else if strings.Contains(typeKey, "disciplinar") && strings.Contains(typeKey, "obligatoria") {
+				typeKey = "dis.obligatoria"
+			} else if strings.Contains(typeKey, "disciplinar") && strings.Contains(typeKey, "optativa") {
+				typeKey = "dis.optativa"
+			} else if strings.Contains(typeKey, "libre") {
+				typeKey = "libre"
+			} else {
+				typeKey = "libre" // default fallback
+			}
+			
+			creditsByType[typeKey] += planSubject.Credits
 		} else {
 			subjectResult.Status = "PENDIENTE"
 			missingSubjects = append(missingSubjects, subjectResult)
@@ -704,8 +734,6 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 					CodigoOrigen:      codigoOrigen,
 					NombreOrigen:      nombreOrigen,
 					TipologiaOrigen:   tipologiaOrigen,
-					Periodo:           materiaOrigen.Semester,
-					Calificacion:      materiaOrigen.Grade,
 					Equivalencia:      equivalenciaInfo,
 				}
 
@@ -805,16 +833,34 @@ func CompareDobleTitulacionParsed(db *gorm.DB, materiasOrigen, materiasDoble []m
 		// Si encontramos la materia en origen y NO está en la historia de doble titulación
 		if materiaOrigen != nil {
 			if _, yaCursadaEnDoble := materiasCursadasDoble[materiaPlan.Code]; !yaCursadaEnDoble {
+				// Limpiar completamente el nombre origen de todos los prefijos problemáticos
+				nombreOrigenLimpio := nombreOrigen
+				// Múltiples patrones para limpiar nombres problemáticos más comprehensivamente
+				nombreOrigenLimpio = regexp.MustCompile(`^\d+APROBAD?A?`).ReplaceAllString(nombreOrigenLimpio, "")
+				nombreOrigenLimpio = regexp.MustCompile(`^APROBAD?A?`).ReplaceAllString(nombreOrigenLimpio, "")
+				// Patrón adicional para manejar casos como "7APROBADAEstadística I"
+				nombreOrigenLimpio = regexp.MustCompile(`^\d+[A-Z]+`).ReplaceAllStringFunc(nombreOrigenLimpio, func(match string) string {
+					// Si el match contiene APROBADA o similar, eliminarlo completamente
+					if strings.Contains(strings.ToUpper(match), "APROBAD") {
+						return ""
+					}
+					return match
+				})
+				nombreOrigenLimpio = strings.TrimSpace(nombreOrigenLimpio)
+				
+				// Si después de limpiar el nombre queda vacío, usar el nombre del plan objetivo
+				if nombreOrigenLimpio == "" {
+					nombreOrigenLimpio = materiaPlan.Name
+				}
+				
 				materiaHomologable := models.MateriaHomologable{
 					CodigoObjetivo:    materiaPlan.Code,
 					NombreObjetivo:    materiaPlan.Name,
 					Creditos:          materiaPlan.Credits,
 					TipologiaObjetivo: materiaPlan.Type,
 					CodigoOrigen:      codigoOrigen,
-					NombreOrigen:      nombreOrigen,
+					NombreOrigen:      nombreOrigenLimpio,
 					TipologiaOrigen:   tipologiaOrigen,
-					Periodo:           materiaOrigen.Semester,
-					Calificacion:      materiaOrigen.Grade,
 					Equivalencia:      equivalenciaInfo,
 				}
 
@@ -843,6 +889,67 @@ func CompareDobleTitulacionParsed(db *gorm.DB, materiasOrigen, materiasDoble []m
 		TotalCreditos:        totalCreditos,
 		Resumen:              resumen,
 	}, nil
+}
+
+// CompareDobleTitulacionCombinada compara dos historias académicas combinadas con un plan destino
+// USA EXACTAMENTE LA MISMA LÓGICA EXITOSA QUE CAMBIO DE CARRERA
+func CompareDobleTitulacionCombinada(db *gorm.DB, materiasOrigen, materiasDoble []models.SubjectInput, codigoCarreraObjetivo string) (*models.ComparisonResult, error) {
+	fmt.Printf("[DEBUG DOBLE TITULACION] === INICIANDO LÓGICA SIMPLE ===\n")
+	fmt.Printf("[DEBUG DOBLE TITULACION] Materias origen: %d\n", len(materiasOrigen))
+	fmt.Printf("[DEBUG DOBLE TITULACION] Materias doble: %d\n", len(materiasDoble))
+	
+	// 1. COMBINAR AMBAS HISTORIAS ACADÉMICAS SIN DUPLICADOS
+	materiasMap := make(map[string]models.SubjectInput)
+	
+	// Agregar materias de origen
+	for _, materia := range materiasOrigen {
+		key := strings.ToUpper(strings.TrimSpace(materia.Code))
+		if key != "" {
+			materiasMap[key] = materia
+			fmt.Printf("[DEBUG DOBLE TITULACION] Agregada origen: %s - %s\n", materia.Code, materia.Name)
+		}
+	}
+	
+	// Agregar materias de doble (sin duplicar)
+	for _, materia := range materiasDoble {
+		key := strings.ToUpper(strings.TrimSpace(materia.Code))
+		if key != "" {
+			if _, exists := materiasMap[key]; !exists {
+				materiasMap[key] = materia
+				fmt.Printf("[DEBUG DOBLE TITULACION] Agregada doble: %s - %s\n", materia.Code, materia.Name)
+			} else {
+				fmt.Printf("[DEBUG DOBLE TITULACION] Duplicada ignorada: %s - %s\n", materia.Code, materia.Name)
+			}
+		}
+	}
+	
+	// 2. CONVERTIR A SLICE COMBINADO
+	var materiasCombinadas []models.SubjectInput
+	for _, materia := range materiasMap {
+		materiasCombinadas = append(materiasCombinadas, materia)
+	}
+	
+	fmt.Printf("[DEBUG DOBLE TITULACION] Total materias combinadas: %d\n", len(materiasCombinadas))
+	
+	// 3. CREAR EL MISMO DTO QUE USA CAMBIO DE CARRERA
+	historiaAcademicaCombinada := models.AcademicHistoryInput{
+		CareerCode: codigoCarreraObjetivo,
+		Subjects:   materiasCombinadas,
+	}
+	
+	// 4. USAR EXACTAMENTE LA MISMA FUNCIÓN EXITOSA DE CAMBIO DE CARRERA
+	fmt.Printf("[DEBUG DOBLE TITULACION] Llamando a CompareAcademicHistoryByCareerCode...\n")
+	resultado, err := CompareAcademicHistoryByCareerCode(db, historiaAcademicaCombinada)
+	if err != nil {
+		fmt.Printf("[DEBUG DOBLE TITULACION] Error en comparación: %v\n", err)
+		return nil, err
+	}
+	
+	fmt.Printf("[DEBUG DOBLE TITULACION] === RESULTADO EXITOSO ===\n")
+	fmt.Printf("[DEBUG DOBLE TITULACION] Materias equivalentes: %d\n", len(resultado.EquivalentSubjects))
+	fmt.Printf("[DEBUG DOBLE TITULACION] Materias faltantes: %d\n", len(resultado.MissingSubjects))
+	
+	return resultado, nil
 }
 
 // procesarHistoriaAcademicaTexto procesa el texto de historia académica y retorna una lista de materias
@@ -913,20 +1020,21 @@ func procesarHistoriaAcademicaTexto(texto string) []models.SubjectInput {
 	return materias
 }
 
-// mapearTipologia convierte las tipologías del texto a las del modelo
+// mapearTipologia convierte las tipologías del texto parseado a TipologiaAsignatura
 func mapearTipologia(tipo string) models.TipologiaAsignatura {
-	tipo = strings.ToUpper(tipo)
+	// Usar la función existente simple que funciona
+	tipo = strings.TrimSpace(strings.ToUpper(tipo))
 	
 	switch {
-	case strings.Contains(tipo, "FUNDAMENTACIÓN OBLIGATORIA") || strings.Contains(tipo, "FUND. OBLIGATORIA"):
+	case strings.Contains(tipo, "FUND") && strings.Contains(tipo, "OBLIGATORIA"):
 		return models.TipologiaFundamentalObligatoria
-	case strings.Contains(tipo, "FUNDAMENTACIÓN OPTATIVA") || strings.Contains(tipo, "FUND. OPTATIVA"):
+	case strings.Contains(tipo, "FUND") && strings.Contains(tipo, "OPTATIVA"):
 		return models.TipologiaFundamentalOptativa
-	case strings.Contains(tipo, "DISCIPLINAR OBLIGATORIA"):
+	case strings.Contains(tipo, "DISCIPLINAR") && strings.Contains(tipo, "OBLIGATORIA"):
 		return models.TipologiaDisciplinarObligatoria
-	case strings.Contains(tipo, "DISCIPLINAR OPTATIVA"):
+	case strings.Contains(tipo, "DISCIPLINAR") && strings.Contains(tipo, "OPTATIVA"):
 		return models.TipologiaDisciplinarOptativa
-	case strings.Contains(tipo, "LIBRE ELECCIÓN") || strings.Contains(tipo, "LIBRE ELECCIÓN"):
+	case strings.Contains(tipo, "LIBRE"):
 		return models.TipologiaLibreEleccion
 	case strings.Contains(tipo, "TRABAJO DE GRADO"):
 		return models.TipologiaTrabajoGrado

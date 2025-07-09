@@ -181,8 +181,6 @@ type MateriaHomologable struct {
 	CodigoOrigen       string            `json:"codigo_origen"`       // Código original (del primer plan)
 	NombreOrigen       string            `json:"nombre_origen"`       // Nombre original (del primer plan)
 	TipologiaOrigen    string            `json:"tipologia_origen"`    // Tipología original
-	Periodo            string            `json:"periodo"`             // Periodo en que se cursó
-	Calificacion       float64           `json:"calificacion"`        // Calificación obtenida
 	Equivalencia       *EquivalenceResult `json:"equivalencia,omitempty"` // Info de equivalencia si aplica
 }
 
