@@ -143,6 +143,8 @@ func main() {
 				"POST /api/compare - Comparar historia académica con plan de estudio",
 				"POST /api/compare-by-career - Comparar por código de carrera",
 				"POST /api/api-compare - Comparar historia académica en texto plano",
+				"POST /api/cambio-carrera - Comparar para cambio de carrera (JSON)",
+				"POST /api/cambio-carrera-texto - Comparar para cambio de carrera desde texto plano",
 				"POST /api/doble-titulacion - Simulación de doble titulación",
 				"POST /api/doble-titulacion/excel - Generar reporte Excel de doble titulación (retorna URL de descarga)",
 				"POST /api/careers - Crear nueva carrera",
@@ -183,6 +185,11 @@ func main() {
 		// Nuevo endpoint para comparar historia académica en texto plano
 		api.POST("/api-compare", compareAcademicHistoryFromText)
 
+		// Nuevo endpoint específico para cambio de carrera (aislado de doble titulación)
+		api.POST("/cambio-carrera", compareForCareerChange)
+
+		// Nuevo endpoint para cambio de carrera desde texto plano (form-data y JSON)
+		api.POST("/cambio-carrera-texto", compareCareerChangeFromText)
 
 
 		//endpoint para crear carrera
@@ -1167,6 +1174,53 @@ func preprocessAcademicHistoryText(raw string) string {
 	fmt.Printf("[DEBUG PREPROCESSOR] === INICIANDO PREPROCESAMIENTO ===\n")
 	fmt.Printf("[DEBUG PREPROCESSOR] Texto original longitud: %d\n", len(raw))
 	
+	// NUEVO: Patrón para separar materias cuando están todas en una línea continua
+	// Formato: Nombre (Código)CréditosTipoPeriodoCalificaciónAPROBADA
+	continuousMateriaPattern := regexp.MustCompile(`([^(]+)\s*\(([^)]+)\)\s*(\d+)\s*(FUND\.|DISCIPLINAR|LIBRE|TRABAJO|NIVELACIÓN)[^A-Z]*([A-Z\s]+?)\s*(\d{4}-\d+S?\s+[^0-9]*)\s*([0-9]*\.?[0-9]*)\s*APROBADA`)
+	
+	// Si el texto no tiene saltos de línea significativos, intentar separar materias continuas
+	if !strings.Contains(raw, "\n") || len(strings.Split(raw, "\n")) < 5 {
+		fmt.Printf("[DEBUG PREPROCESSOR] Detectado texto continuo, intentando separar materias...\n")
+		
+		matches := continuousMateriaPattern.FindAllStringSubmatch(raw, -1)
+		if len(matches) > 0 {
+			fmt.Printf("[DEBUG PREPROCESSOR] Encontradas %d materias en texto continuo\n", len(matches))
+			
+			var processedLines []string
+			for i, match := range matches {
+				if len(match) >= 6 {
+					nombre := strings.TrimSpace(match[1])
+					codigo := strings.TrimSpace(match[2])
+					creditos := strings.TrimSpace(match[3])
+					tipoCompleto := strings.TrimSpace(match[4] + " " + match[5])
+					periodo := strings.TrimSpace(match[6])
+					calificacion := ""
+					if len(match) >= 8 && match[7] != "" {
+						calificacion = strings.TrimSpace(match[7])
+					}
+					
+					// Crear entrada estructurada para cada materia
+					materiaBlock := fmt.Sprintf("%s (%s)\n%s\n%s\n%s", nombre, codigo, creditos, tipoCompleto, periodo)
+					if calificacion != "" {
+						materiaBlock += "\n" + calificacion
+					}
+					materiaBlock += "\nAPROBADA\n"
+					
+					processedLines = append(processedLines, materiaBlock)
+					fmt.Printf("[DEBUG PREPROCESSOR] ✓ Materia %d: %s (%s) - %s créditos - %s\n", i+1, nombre, codigo, creditos, tipoCompleto)
+				}
+			}
+			
+			if len(processedLines) > 0 {
+				result := strings.Join(processedLines, "\n")
+				fmt.Printf("[DEBUG PREPROCESSOR] === TEXTO PROCESADO EXITOSAMENTE ===\n")
+				fmt.Printf("[DEBUG PREPROCESSOR] Materias extraídas: %d\n", len(processedLines))
+				return result
+			}
+		}
+	}
+	
+	// Si no es texto continuo, usar el procesamiento original
 	// Patrón para detectar líneas de materias válidas
 	// Formato: Nombre (Código) \t Créditos \t Tipo \t Periodo \t Calificación+APROBADA
 	materiaPattern := regexp.MustCompile(`([^(\n\r\t]+)\s*\(([^)]+)\)\s+(\d+)\s+(FUND\.|DISCIPLINAR|LIBRE|TRABAJO|NIVELACIÓN)[^A-Z]*([A-Z\s]+?)\s+(\d{4}-\d+S?\s+[^0-9]*)\s*([0-9]+\.?[0-9]*)?[A-Z]*APROBADA?`)
@@ -1320,6 +1374,128 @@ func compareAcademicHistoryFromText(c *gin.Context) {
 
 	// Realizar la comparación
 	result, err := functions.CompareAcademicHistoryByCareerCode(config.DB, academicHistory)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Obtener información del plan de estudio usado
+	studyPlan, _ := functions.GetStudyPlanByCareerCode(config.DB, targetCareerCode)
+
+	c.JSON(http.StatusOK, gin.H{
+		"parsed_subjects": parsedSubjects,
+		"comparison_result": result,
+		"study_plan_info": gin.H{
+			"id":      studyPlan.ID,
+			"version": studyPlan.Version,
+			"career":  studyPlan.Career.Name,
+		},
+		"summary": gin.H{
+			"total_subjects_parsed":     len(parsedSubjects),
+			"total_subjects_in_plan":    len(result.EquivalentSubjects) + len(result.MissingSubjects),
+			"approved_subjects":         len(result.EquivalentSubjects),
+			"missing_subjects":          len(result.MissingSubjects),
+			"completion_percentage":     calculateCompletionPercentage(result.CreditsSummary),
+		},
+	})
+}
+
+// compareForCareerChange compara historia académica para un cambio de carrera
+func compareForCareerChange(c *gin.Context) {
+	var academicHistory models.AcademicHistoryInput
+	if err := c.ShouldBindJSON(&academicHistory); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos de entrada inválidos: " + err.Error()})
+		return
+	}
+
+	// Realizar la comparación usando la función de cambio de carrera
+	result, err := functions.CompareAcademicHistoryForCareerChange(config.DB, academicHistory)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Obtener información del plan de estudio usado
+	studyPlan, _ := functions.GetStudyPlanByCareerCode(config.DB, academicHistory.CareerCode)
+
+	c.JSON(http.StatusOK, gin.H{
+		"comparison_result": result,
+		"study_plan_info": gin.H{
+			"id":      studyPlan.ID,
+			"version": studyPlan.Version,
+			"career":  studyPlan.Career.Name,
+		},
+		"summary": gin.H{
+			"total_subjects_in_plan":     len(result.EquivalentSubjects) + len(result.MissingSubjects),
+			"approved_subjects":          len(result.EquivalentSubjects),
+			"missing_subjects":           len(result.MissingSubjects),
+			"completion_percentage":      calculateCompletionPercentage(result.CreditsSummary),
+		},
+	})
+}
+
+// compareCareerChangeFromText maneja cambio de carrera desde texto plano
+func compareCareerChangeFromText(c *gin.Context) {
+	var academicHistoryText, targetCareerCode string
+
+	contentType := c.GetHeader("Content-Type")
+	if strings.HasPrefix(contentType, "application/json") {
+		var req APICompareRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Datos de entrada inválidos: " + err.Error()})
+			return
+		}
+		academicHistoryText = req.AcademicHistoryText
+		targetCareerCode = req.TargetCareerCode
+	} else if strings.HasPrefix(contentType, "multipart/form-data") || strings.HasPrefix(contentType, "application/x-www-form-urlencoded") {
+		// Leer desde form-data o x-www-form-urlencoded
+		academicHistoryText = c.PostForm("academic_history_text")
+		targetCareerCode = c.PostForm("target_career_code")
+		fmt.Printf("[DEBUG CAMBIO CARRERA TEXTO] academic_history_text recibido: '%s'\n", academicHistoryText)
+		fmt.Printf("[DEBUG CAMBIO CARRERA TEXTO] target_career_code recibido: '%s'\n", targetCareerCode)
+		if academicHistoryText == "" || targetCareerCode == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Faltan campos en el formulario: academic_history_text y target_career_code son requeridos"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type no soportado. Usa application/json o form-data."})
+		return
+	}
+
+	// Limpieza y normalización del texto
+	cleanedText := preprocessAcademicHistoryText(academicHistoryText)
+
+	// Parsear la historia académica del texto limpio
+	parsedSubjects, err := parseAcademicHistoryTextFlexible(cleanedText)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia académica: " + err.Error()})
+		return
+	}
+
+	// Convertir a formato de entrada de la API
+	var subjects []models.SubjectInput
+	for _, ps := range parsedSubjects {
+		subject := models.SubjectInput{
+			Code:     strings.TrimSpace(ps.Code),
+			Name:     ps.Name,
+			Credits:  ps.Credits,
+			Type:     models.TipologiaAsignatura(ps.Type),
+			Grade:    ps.Grade,
+			Status:   ps.Status,
+			Semester: ps.Semester,
+		}
+		subjects = append(subjects, subject)
+	}
+	fmt.Printf("[DEBUG CAMBIO CARRERA TEXTO] Subjects parseados para comparar: %+v\n", subjects)
+
+	academicHistory := models.AcademicHistoryInput{
+		CareerCode: targetCareerCode,
+		Subjects:   subjects,
+	}
+	fmt.Printf("[DEBUG CAMBIO CARRERA TEXTO] DTO enviado a comparación: %+v\n", academicHistory)
+
+	// Realizar la comparación usando la función específica de cambio de carrera
+	result, err := functions.CompareAcademicHistoryForCareerChange(config.DB, academicHistory)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
