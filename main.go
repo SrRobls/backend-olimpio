@@ -145,6 +145,7 @@ func main() {
 				"POST /api/api-compare - Comparar historia académica en texto plano",
 				"POST /api/cambio-carrera - Comparar para cambio de carrera (JSON)",
 				"POST /api/cambio-carrera-texto - Comparar para cambio de carrera desde texto plano",
+				"POST /api/cambio-carrera/excel - Generar reporte Excel de cambio de carrera (retorna URL de descarga)",
 				"POST /api/doble-titulacion - Simulación de doble titulación",
 				"POST /api/doble-titulacion/excel - Generar reporte Excel de doble titulación (retorna URL de descarga)",
 				"POST /api/careers - Crear nueva carrera",
@@ -191,6 +192,389 @@ func main() {
 		// Nuevo endpoint para cambio de carrera desde texto plano (form-data y JSON)
 		api.POST("/cambio-carrera-texto", compareCareerChangeFromText)
 
+		// Nuevo endpoint para generar reporte Excel de cambio de carrera
+		api.POST("/cambio-carrera/excel", func(c *gin.Context) {
+			var academicHistoryText, targetCareerCode string
+
+			contentType := c.GetHeader("Content-Type")
+			if strings.HasPrefix(contentType, "application/json") {
+				var req APICompareRequest
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+					return
+				}
+				academicHistoryText = req.AcademicHistoryText
+				targetCareerCode = req.TargetCareerCode
+			} else if strings.HasPrefix(contentType, "multipart/form-data") || strings.HasPrefix(contentType, "application/x-www-form-urlencoded") {
+				academicHistoryText = c.PostForm("academic_history_text")
+				targetCareerCode = c.PostForm("target_career_code")
+				if academicHistoryText == "" || targetCareerCode == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Faltan campos en el formulario: academic_history_text y target_career_code son requeridos"})
+					return
+				}
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type no soportado. Usa application/json o form-data."})
+				return
+			}
+
+			fmt.Printf("[DEBUG EXCEL CAMBIO CARRERA] Iniciando generación de reporte Excel...\n")
+			fmt.Printf("[DEBUG EXCEL CAMBIO CARRERA] Carrera objetivo: %s\n", targetCareerCode)
+
+			// Usar exactamente el mismo flujo exitoso que el endpoint regular de cambio de carrera
+			cleanedText := preprocessAcademicHistoryText(academicHistoryText)
+
+			parsedSubjects, err := parseAcademicHistoryTextFlexible(cleanedText)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando historia académica: " + err.Error()})
+				return
+			}
+
+			// Convertir a formato de entrada de la API
+			var subjects []models.SubjectInput
+			for _, ps := range parsedSubjects {
+				subject := models.SubjectInput{
+					Code:     strings.TrimSpace(ps.Code),
+					Name:     ps.Name,
+					Credits:  ps.Credits,
+					Type:     models.TipologiaAsignatura(ps.Type),
+					Grade:    ps.Grade,
+					Status:   ps.Status,
+					Semester: ps.Semester,
+				}
+				subjects = append(subjects, subject)
+			}
+
+			academicHistory := models.AcademicHistoryInput{
+				CareerCode: targetCareerCode,
+				Subjects:   subjects,
+			}
+
+			// Realizar la comparación usando la función específica de cambio de carrera
+			result, err := functions.CompareAcademicHistoryForCareerChange(config.DB, academicHistory)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			// Obtener información del plan de estudio usado
+			studyPlan, _ := functions.GetStudyPlanByCareerCode(config.DB, targetCareerCode)
+
+			// Crear el archivo Excel
+			f := excelize.NewFile()
+			defer func() {
+				if err := f.Close(); err != nil {
+					fmt.Println(err)
+				}
+			}()
+
+			// Configurar la hoja principal
+			sheetName := "Informe Cambio de Carrera"
+			index, err := f.NewSheet(sheetName)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando hoja Excel: " + err.Error()})
+				return
+			}
+			f.SetActiveSheet(index)
+
+			// Definir estilos
+			headerStyle, _ := f.NewStyle(&excelize.Style{
+				Font: &excelize.Font{Bold: true, Size: 14, Color: "FFFFFF"},
+				Fill: excelize.Fill{Type: "pattern", Color: []string{"366092"}, Pattern: 1},
+				Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+				Border: []excelize.Border{
+					{Type: "left", Color: "000000", Style: 1},
+					{Type: "top", Color: "000000", Style: 1},
+					{Type: "bottom", Color: "000000", Style: 1},
+					{Type: "right", Color: "000000", Style: 1},
+				},
+			})
+
+			titleStyle, _ := f.NewStyle(&excelize.Style{
+				Font: &excelize.Font{Bold: true, Size: 16, Color: "366092"},
+				Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+			})
+
+			subHeaderStyle, _ := f.NewStyle(&excelize.Style{
+				Font: &excelize.Font{Bold: true, Size: 12, Color: "366092"},
+				Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+			})
+
+			dataStyle, _ := f.NewStyle(&excelize.Style{
+				Border: []excelize.Border{
+					{Type: "left", Color: "CCCCCC", Style: 1},
+					{Type: "top", Color: "CCCCCC", Style: 1},
+					{Type: "bottom", Color: "CCCCCC", Style: 1},
+					{Type: "right", Color: "CCCCCC", Style: 1},
+				},
+				Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+			})
+
+			approvedStyle, _ := f.NewStyle(&excelize.Style{
+				Border: []excelize.Border{
+					{Type: "left", Color: "CCCCCC", Style: 1},
+					{Type: "top", Color: "CCCCCC", Style: 1},
+					{Type: "bottom", Color: "CCCCCC", Style: 1},
+					{Type: "right", Color: "CCCCCC", Style: 1},
+				},
+				Fill: excelize.Fill{Type: "pattern", Color: []string{"E7F7E7"}, Pattern: 1},
+				Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+			})
+
+			pendingStyle, _ := f.NewStyle(&excelize.Style{
+				Border: []excelize.Border{
+					{Type: "left", Color: "CCCCCC", Style: 1},
+					{Type: "top", Color: "CCCCCC", Style: 1},
+					{Type: "bottom", Color: "CCCCCC", Style: 1},
+					{Type: "right", Color: "CCCCCC", Style: 1},
+				},
+				Fill: excelize.Fill{Type: "pattern", Color: []string{"FFE7E7"}, Pattern: 1},
+				Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+			})
+
+			// Título principal
+			f.SetCellValue(sheetName, "A1", "INFORME TÉCNICO - CAMBIO DE CARRERA")
+			f.SetCellStyle(sheetName, "A1", "A1", titleStyle)
+			f.MergeCell(sheetName, "A1", "H1")
+
+			// Información general
+			row := 3
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "INFORMACIÓN GENERAL")
+			f.SetCellStyle(sheetName, "A"+strconv.Itoa(row), "A"+strconv.Itoa(row), subHeaderStyle)
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Fecha de generación:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), time.Now().Format("02/01/2006 15:04:05"))
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Carrera objetivo:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), studyPlan.Career.Name)
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Código de carrera:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), targetCareerCode)
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Plan de estudio:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), studyPlan.Version)
+			row++
+
+			// Resumen estadístico
+			row++
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "RESUMEN ESTADÍSTICO")
+			f.SetCellStyle(sheetName, "A"+strconv.Itoa(row), "A"+strconv.Itoa(row), subHeaderStyle)
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Materias parseadas:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), len(parsedSubjects))
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Materias homologables:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), len(result.EquivalentSubjects))
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Créditos homologables:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), result.TotalCredits)
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Materias faltantes:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), len(result.MissingSubjects))
+			row++
+
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Créditos faltantes:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), result.MissingCredits)
+			row++
+
+			porcentajeAvance := calculateCompletionPercentage(result.CreditsSummary)
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "Porcentaje de avance:")
+			f.SetCellValue(sheetName, "B"+strconv.Itoa(row), fmt.Sprintf("%.2f%%", porcentajeAvance))
+			row++
+
+			// Tabla de materias homologables (APROBADAS)
+			row += 2
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "MATERIAS HOMOLOGABLES")
+			f.SetCellStyle(sheetName, "A"+strconv.Itoa(row), "A"+strconv.Itoa(row), subHeaderStyle)
+			row++
+
+			// Encabezados de la tabla
+			headers := []string{"Código", "Nombre Materia", "Créditos", "Tipología", "Estado", "Equivalencia"}
+			for col, header := range headers {
+				cellName, _ := excelize.CoordinatesToCellName(col+1, row)
+				f.SetCellValue(sheetName, cellName, header)
+				f.SetCellStyle(sheetName, cellName, cellName, headerStyle)
+			}
+			row++
+
+			// Datos de materias homologables
+			for _, subject := range result.EquivalentSubjects {
+				equivalencia := "Directa"
+				if subject.Equivalence != nil {
+					equivalencia = subject.Equivalence.Notes
+				}
+
+				data := []interface{}{
+					subject.Code,
+					subject.Name,
+					subject.Credits,
+					string(subject.Type),
+					subject.Status,
+					equivalencia,
+				}
+
+				for col, value := range data {
+					cellName, _ := excelize.CoordinatesToCellName(col+1, row)
+					f.SetCellValue(sheetName, cellName, value)
+					f.SetCellStyle(sheetName, cellName, cellName, approvedStyle)
+				}
+				row++
+			}
+
+			// Tabla de materias faltantes (PENDIENTES)
+			row += 2
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "MATERIAS FALTANTES")
+			f.SetCellStyle(sheetName, "A"+strconv.Itoa(row), "A"+strconv.Itoa(row), subHeaderStyle)
+			row++
+
+			// Encabezados de la tabla de faltantes
+			for col, header := range headers[:5] { // Solo los primeros 5 headers (sin equivalencia)
+				cellName, _ := excelize.CoordinatesToCellName(col+1, row)
+				f.SetCellValue(sheetName, cellName, header)
+				f.SetCellStyle(sheetName, cellName, cellName, headerStyle)
+			}
+			row++
+
+			// Datos de materias faltantes
+			for _, subject := range result.MissingSubjects {
+				data := []interface{}{
+					subject.Code,
+					subject.Name,
+					subject.Credits,
+					string(subject.Type),
+					"PENDIENTE",
+				}
+
+				for col, value := range data {
+					cellName, _ := excelize.CoordinatesToCellName(col+1, row)
+					f.SetCellValue(sheetName, cellName, value)
+					f.SetCellStyle(sheetName, cellName, cellName, pendingStyle)
+				}
+				row++
+			}
+
+			// Resumen por tipología
+			row += 2
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "RESUMEN POR TIPOLOGÍA")
+			f.SetCellStyle(sheetName, "A"+strconv.Itoa(row), "A"+strconv.Itoa(row), subHeaderStyle)
+			row++
+
+			tipologyHeaders := []string{"Tipología", "Requeridos", "Completados", "Faltantes", "% Avance"}
+			for col, header := range tipologyHeaders {
+				cellName, _ := excelize.CoordinatesToCellName(col+1, row)
+				f.SetCellValue(sheetName, cellName, header)
+				f.SetCellStyle(sheetName, cellName, cellName, headerStyle)
+			}
+			row++
+
+			// Datos por tipología
+			tipologies := map[string]models.CreditTypeInfo{
+				"Fundamental Obligatoria": result.CreditsSummary.FundObligatoria,
+				"Fundamental Optativa":    result.CreditsSummary.FundOptativa,
+				"Disciplinar Obligatoria": result.CreditsSummary.DisObligatoria,
+				"Disciplinar Optativa":    result.CreditsSummary.DisOptativa,
+				"Libre Elección":          result.CreditsSummary.Libre,
+				"TOTAL":                   result.CreditsSummary.Total,
+			}
+
+			for tipology, info := range tipologies {
+				percentage := 0.0
+				if info.Required > 0 {
+					percentage = (float64(info.Completed) / float64(info.Required)) * 100.0
+				}
+
+				data := []interface{}{
+					tipology,
+					info.Required,
+					info.Completed,
+					info.Missing,
+					fmt.Sprintf("%.1f%%", percentage),
+				}
+
+				for col, value := range data {
+					cellName, _ := excelize.CoordinatesToCellName(col+1, row)
+					f.SetCellValue(sheetName, cellName, value)
+					if tipology == "TOTAL" {
+						f.SetCellStyle(sheetName, cellName, cellName, headerStyle)
+					} else {
+						f.SetCellStyle(sheetName, cellName, cellName, dataStyle)
+					}
+				}
+				row++
+			}
+
+			// Agregar análisis detallado
+			row += 2
+			f.SetCellValue(sheetName, "A"+strconv.Itoa(row), "ANÁLISIS DETALLADO")
+			f.SetCellStyle(sheetName, "A"+strconv.Itoa(row), "A"+strconv.Itoa(row), subHeaderStyle)
+			row++
+
+			// Análisis por estado
+			analisisData := [][]interface{}{
+				{"Materias reconocidas:", len(result.EquivalentSubjects), fmt.Sprintf("%.1f%% del total", float64(len(result.EquivalentSubjects))/float64(len(result.EquivalentSubjects)+len(result.MissingSubjects))*100)},
+				{"Materias por cursar:", len(result.MissingSubjects), fmt.Sprintf("%.1f%% del total", float64(len(result.MissingSubjects))/float64(len(result.EquivalentSubjects)+len(result.MissingSubjects))*100)},
+				{"Créditos reconocidos:", result.TotalCredits, fmt.Sprintf("%.1f%% del total", porcentajeAvance)},
+				{"Créditos por cursar:", result.MissingCredits, fmt.Sprintf("%.1f%% del total", 100.0-porcentajeAvance)},
+			}
+
+			for _, analisis := range analisisData {
+				f.SetCellValue(sheetName, "A"+strconv.Itoa(row), analisis[0])
+				f.SetCellValue(sheetName, "B"+strconv.Itoa(row), analisis[1])
+				f.SetCellValue(sheetName, "C"+strconv.Itoa(row), analisis[2])
+				row++
+			}
+
+			// Ajustar ancho de columnas
+			f.SetColWidth(sheetName, "A", "A", 25)
+			f.SetColWidth(sheetName, "B", "B", 50)
+			f.SetColWidth(sheetName, "C", "C", 12)
+			f.SetColWidth(sheetName, "D", "D", 25)
+			f.SetColWidth(sheetName, "E", "E", 15)
+			f.SetColWidth(sheetName, "F", "F", 30)
+
+			// Generar nombre de archivo único
+			timestamp := time.Now().Format("20060102_150405")
+			filename := fmt.Sprintf("Informe_Cambio_Carrera_%s_%s.xlsx", targetCareerCode, timestamp)
+			filepath := fmt.Sprintf("static/reports/%s", filename)
+
+			// Guardar el archivo en el servidor
+			if err := f.SaveAs(filepath); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error guardando archivo Excel: " + err.Error()})
+				return
+			}
+
+			// Construir URL de descarga
+			downloadURL := fmt.Sprintf("http://localhost:8080/static/reports/%s", filename)
+
+			// Retornar respuesta JSON con URL de descarga
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "Reporte Excel de cambio de carrera generado exitosamente",
+				"download_url": downloadURL,
+				"filename": filename,
+				"report_info": gin.H{
+					"carrera": studyPlan.Career.Name,
+					"codigo_carrera": targetCareerCode,
+					"materias_parseadas": len(parsedSubjects),
+					"materias_homologables": len(result.EquivalentSubjects),
+					"creditos_homologables": result.TotalCredits,
+					"materias_faltantes": len(result.MissingSubjects),
+					"creditos_faltantes": result.MissingCredits,
+					"porcentaje_avance": fmt.Sprintf("%.2f%%", porcentajeAvance),
+					"fecha_generacion": time.Now().Format("02/01/2006 15:04:05"),
+				},
+			})
+
+			fmt.Printf("[DEBUG EXCEL CAMBIO CARRERA] Reporte Excel generado exitosamente: %s\n", filepath)
+			fmt.Printf("[DEBUG EXCEL CAMBIO CARRERA] URL de descarga: %s\n", downloadURL)
+		})
 
 		//endpoint para crear carrera
 		api.POST("/careers", createCareer)
