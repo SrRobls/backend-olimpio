@@ -917,8 +917,12 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 		materiasCursadasDoble[materia.Code] = materia
 	}
 
+	// 4.5. Crear mapa para controlar créditos por componente académico
+	creditosPorComponente := make(map[string]int)
+
 	// 5. Comparar materias del plan objetivo con la historia de origen
 	var materiasHomologables []models.MateriaHomologable
+	var warnings []models.Warning
 	totalCreditos := 0
 
 	for _, materiaPlan := range planObjetivo.Subjects {
@@ -954,24 +958,61 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 			}
 		}
 
-		// Si encontramos la materia en origen y NO está en la historia de doble titulación
+		// Si encontramos la materia en origen
 		if materiaOrigen != nil {
 			if _, yaCursadaEnDoble := materiasCursadasDoble[materiaPlan.Code]; !yaCursadaEnDoble {
-				materiaHomologable := models.MateriaHomologable{
-					CodigoObjetivo:    materiaPlan.Code,
-					NombreObjetivo:    materiaPlan.Name,
-					Creditos:          materiaPlan.Credits,
-					TipologiaObjetivo: materiaPlan.Type,
-					CodigoOrigen:      codigoOrigen,
-					NombreOrigen:      nombreOrigen,
-					TipologiaOrigen:   tipologiaOrigen,
-					Equivalencia:      equivalenciaInfo,
+				// Verificar si hay equivalencia en historia doble
+				equivalenciaEnDoble := false
+				for codigoOrig, codigoObj := range equivalenciaMap {
+					if codigoObj == materiaPlan.Code {
+						if _, existe := materiasCursadasDoble[codigoOrig]; existe {
+							equivalenciaEnDoble = true
+							break
+						}
+					}
 				}
 
-				materiasHomologables = append(materiasHomologables, materiaHomologable)
-				totalCreditos += materiaPlan.Credits
+				if !equivalenciaEnDoble {
+					// Materia está en origen pero no en doble - generar warning
+					warnings = append(warnings, models.Warning{
+						Type:        "MATERIA_REQUIERE_HOMOLOGACION",
+						Message:     fmt.Sprintf("La materia '%s' (%s) está en la historia origen pero no en la doble titulación, requiere homologación", materiaPlan.Name, materiaPlan.Code),
+						SubjectCode: materiaPlan.Code,
+						SubjectName: materiaPlan.Name,
+					})
+				} else {
+					// Verificar si el componente académico ya tiene suficientes créditos
+					if materiaPlan.ComponenteAcademico != "" {
+						creditosActuales := creditosPorComponente[materiaPlan.ComponenteAcademico]
+						creditosRequeridos := getCreditosRequeridosPorComponente(planObjetivo, materiaPlan.ComponenteAcademico)
+						
+						if creditosActuales >= creditosRequeridos {
+							// El componente ya tiene suficientes créditos, no homologar
+							continue
+						}
+					}
+
+					materiaHomologable := models.MateriaHomologable{
+						CodigoObjetivo:    materiaPlan.Code,
+						NombreObjetivo:    materiaPlan.Name,
+						Creditos:          materiaPlan.Credits,
+						TipologiaObjetivo: materiaPlan.Type,
+						CodigoOrigen:      codigoOrigen,
+						NombreOrigen:      nombreOrigen,
+						TipologiaOrigen:   tipologiaOrigen,
+						Equivalencia:      equivalenciaInfo,
+					}
+					materiasHomologables = append(materiasHomologables, materiaHomologable)
+					totalCreditos += materiaPlan.Credits
+
+					// Actualizar créditos del componente
+					if materiaPlan.ComponenteAcademico != "" {
+						creditosPorComponente[materiaPlan.ComponenteAcademico] += materiaPlan.Credits
+					}
+				}
 			}
 		}
+		// Si no encontramos la materia en origen, no hacemos nada (no es homologable)
 	}
 
 	// 6. Calcular resumen
@@ -992,7 +1033,20 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 		TotalMaterias:        len(materiasHomologables),
 		TotalCreditos:        totalCreditos,
 		Resumen:              resumen,
+		Warnings:             warnings,
 	}, nil
+}
+
+// Función auxiliar para obtener créditos requeridos por componente
+func getCreditosRequeridosPorComponente(plan *models.StudyPlan, componente string) int {
+	// Implementar según tu modelo de datos
+	totalCreditos := 0
+	for _, subject := range plan.Subjects {
+		if subject.ComponenteAcademico == componente {
+			totalCreditos += subject.Credits
+		}
+	}
+	return totalCreditos
 }
 
 // CompareDobleTitulacionParsed compara dos listas de materias ya parseadas para doble titulación
