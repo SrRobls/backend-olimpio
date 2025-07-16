@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,6 +22,37 @@ import (
 	"olimpo-vicedecanatura/models"
 )
 
+// ensureDirectoryExists creates directory if it doesn't exist
+func ensureDirectoryExists(dirPath string) error {
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+		return os.MkdirAll(dirPath, 0755)
+	}
+	return nil
+}
+
+// buildDownloadURL constructs the correct download URL based on environment
+func buildDownloadURL(filename string, c *gin.Context) string {
+	// Get the host from the request or use default
+	host := c.GetHeader("Host")
+	scheme := "https" // Default to https for production
+	
+	// Check if we're running locally
+	if strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1") {
+		scheme = "http"
+	}
+	
+	// If no host in header, try to determine from request
+	if host == "" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+		host = c.Request.Host
+	}
+	
+	return fmt.Sprintf("%s://%s/static/reports/%s", scheme, host, filename)
+}
 
 type TipologiaAsignatura string
 
@@ -109,6 +142,12 @@ func main() {
 	// Insertar datos iniciales (opcional)
 	database.SeedInitialData(config.DB)
 	log.Println("✅ Datos iniciales cargados (si era necesario)")
+
+	// Crear directorio para reportes si no existe
+	if err := ensureDirectoryExists("static/reports"); err != nil {
+		log.Fatalf("Error creando directorio de reportes: %v", err)
+	}
+	log.Println("✅ Directorio de reportes verificado/creado exitosamente")
 
 	// Configurar CORS y middlewares
     r := gin.Default()
@@ -542,7 +581,15 @@ func main() {
 			// Generar nombre de archivo único
 			timestamp := time.Now().Format("20060102_150405")
 			filename := fmt.Sprintf("Informe_Cambio_Carrera_%s_%s.xlsx", targetCareerCode, timestamp)
-			filepath := fmt.Sprintf("static/reports/%s", filename)
+			
+			// Asegurar que el directorio existe
+			reportsDir := "static/reports"
+			if err := ensureDirectoryExists(reportsDir); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando directorio de reportes: " + err.Error()})
+				return
+			}
+			
+			filepath := filepath.Join(reportsDir, filename)
 
 			// Guardar el archivo en el servidor
 			if err := f.SaveAs(filepath); err != nil {
@@ -550,8 +597,8 @@ func main() {
 				return
 			}
 
-			// Construir URL de descarga
-			downloadURL := fmt.Sprintf("http://localhost:8080/static/reports/%s", filename)
+			// Construir URL de descarga usando el helper
+			downloadURL := buildDownloadURL(filename, c)
 
 			// Retornar respuesta JSON con URL de descarga
 			c.JSON(http.StatusOK, gin.H{
@@ -1032,7 +1079,15 @@ func main() {
 		// Generar nombre de archivo único
 		timestamp := time.Now().Format("20060102_150405")
 		filename := fmt.Sprintf("Informe_Doble_Titulacion_%s_%s.xlsx", req.CodigoCarreraObjetivo, timestamp)
-		filepath := fmt.Sprintf("static/reports/%s", filename)
+		
+		// Asegurar que el directorio existe
+		reportsDir := "static/reports"
+		if err := ensureDirectoryExists(reportsDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando directorio de reportes: " + err.Error()})
+			return
+		}
+		
+		filepath := filepath.Join(reportsDir, filename)
 
 		// Guardar el archivo en el servidor
 		if err := f.SaveAs(filepath); err != nil {
@@ -1040,8 +1095,8 @@ func main() {
 			return
 		}
 
-		// Construir URL de descarga
-		downloadURL := fmt.Sprintf("http://localhost:8080/static/reports/%s", filename)
+		// Construir URL de descarga usando el helper
+		downloadURL := buildDownloadURL(filename, c)
 
 		// Retornar respuesta JSON con URL de descarga
 		c.JSON(http.StatusOK, gin.H{
