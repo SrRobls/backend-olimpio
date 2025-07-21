@@ -900,8 +900,8 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 	var equivalencias []models.Equivalence
 	db.Preload("SourceSubject").Preload("TargetSubject").Where("career_id = ?", planObjetivo.CareerID).Find(&equivalencias)
 
-	// Crear mapa de equivalencias para búsqueda rápida
-	equivalenciaMap := make(map[string]string) // código origen -> código objetivo
+	// Crear mapa de equivalencias: código origen -> código objetivo
+	equivalenciaMap := make(map[string]string)
 	for _, equiv := range equivalencias {
 		equivalenciaMap[equiv.SourceSubject.Code] = equiv.TargetSubject.Code
 	}
@@ -920,29 +920,29 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 	// 4.5. Crear mapa para controlar créditos por componente académico
 	creditosPorComponente := make(map[string]int)
 
-	// 5. Comparar materias del plan objetivo con la historia de origen
+	// 5. ONLY iterate through subjects that are actually in the study plan
 	var materiasHomologables []models.MateriaHomologable
 	var warnings []models.Warning
 	totalCreditos := 0
 
 	for _, materiaPlan := range planObjetivo.Subjects {
-		// Buscar si la materia está en la historia de origen (directa o por equivalencia)
+		// Check if this study plan subject can be homologated
 		var materiaOrigen *models.SubjectInput
 		var codigoOrigen string
 		var nombreOrigen string
 		var tipologiaOrigen string
 		var equivalenciaInfo *models.EquivalenceResult
 
-		// Verificar coincidencia directa
+		// First, check direct match in origen
 		if materia, existe := materiasCursadasOrigen[materiaPlan.Code]; existe {
 			materiaOrigen = &materia
 			codigoOrigen = materia.Code
 			nombreOrigen = materia.Name
 			tipologiaOrigen = string(materia.Type)
 		} else {
-			// Verificar por equivalencia
+			// Check for equivalence: find if any subject in origen is equivalent to this study plan subject
 			for codigoOrig, codigoObj := range equivalenciaMap {
-				if codigoObj == materiaPlan.Code {
+				if codigoObj == materiaPlan.Code { // This origen subject is equivalent to our study plan subject
 					if materia, existe := materiasCursadasOrigen[codigoOrig]; existe {
 						materiaOrigen = &materia
 						codigoOrigen = materia.Code
@@ -958,64 +958,71 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 			}
 		}
 
-		// Si encontramos la materia en origen
+		// If we found the subject in origen (directly or through equivalence)
 		if materiaOrigen != nil {
-			if _, yaCursadaEnDoble := materiasCursadasDoble[materiaPlan.Code]; !yaCursadaEnDoble {
-				// Verificar si hay equivalencia en historia doble
-				equivalenciaEnDoble := false
+			// Check if it's already completed in double degree
+			yaCompletadaEnDoble := false
+			
+			// Direct check
+			if _, existe := materiasCursadasDoble[materiaPlan.Code]; existe {
+				yaCompletadaEnDoble = true
+			} else {
+				// Check through equivalence
 				for codigoOrig, codigoObj := range equivalenciaMap {
 					if codigoObj == materiaPlan.Code {
 						if _, existe := materiasCursadasDoble[codigoOrig]; existe {
-							equivalenciaEnDoble = true
+							yaCompletadaEnDoble = true
 							break
 						}
 					}
 				}
+			}
 
-				if !equivalenciaEnDoble {
-					// Materia está en origen pero no en doble - generar warning
-					warnings = append(warnings, models.Warning{
-						Type:        "MATERIA_REQUIERE_HOMOLOGACION",
-						Message:     fmt.Sprintf("La materia '%s' (%s) está en la historia origen pero no en la doble titulación, requiere homologación", materiaPlan.Name, materiaPlan.Code),
-						SubjectCode: materiaPlan.Code,
-						SubjectName: materiaPlan.Name,
-					})
-				} else {
-					// Verificar si el componente académico ya tiene suficientes créditos
-					if materiaPlan.ComponenteAcademico != "" {
-						creditosActuales := creditosPorComponente[materiaPlan.ComponenteAcademico]
-						creditosRequeridos := getCreditosRequeridosPorComponente(planObjetivo, materiaPlan.ComponenteAcademico)
-						
-						if creditosActuales >= creditosRequeridos {
-							// El componente ya tiene suficientes créditos, no homologar
-							continue
-						}
+			if !yaCompletadaEnDoble {
+				// Subject is in origen but not in double degree - generate warning
+				warnings = append(warnings, models.Warning{
+					Type:        "MATERIA_REQUIERE_HOMOLOGACION",
+					Message:     fmt.Sprintf("La materia '%s' (%s) está en la historia origen pero no en la doble titulación, requiere homologación", materiaPlan.Name, materiaPlan.Code),
+					SubjectCode: materiaPlan.Code,
+					SubjectName: materiaPlan.Name,
+				})
+			} else {
+				// Check if the academic component already has enough credits
+				if materiaPlan.ComponenteAcademico != "" {
+					creditosActuales := creditosPorComponente[materiaPlan.ComponenteAcademico]
+					creditosRequeridos := getCreditosRequeridosPorComponente(planObjetivo, materiaPlan.ComponenteAcademico)
+					
+					if creditosActuales >= creditosRequeridos {
+						// Component already has enough credits, don't homologate
+						continue
 					}
+				}
 
-					materiaHomologable := models.MateriaHomologable{
-						CodigoObjetivo:    materiaPlan.Code,
-						NombreObjetivo:    materiaPlan.Name,
-						Creditos:          materiaPlan.Credits,
-						TipologiaObjetivo: materiaPlan.Type,
-						CodigoOrigen:      codigoOrigen,
-						NombreOrigen:      nombreOrigen,
-						TipologiaOrigen:   tipologiaOrigen,
-						Equivalencia:      equivalenciaInfo,
-					}
-					materiasHomologables = append(materiasHomologables, materiaHomologable)
-					totalCreditos += materiaPlan.Credits
+				// This study plan subject can be homologated
+				materiaHomologable := models.MateriaHomologable{
+					CodigoObjetivo:    materiaPlan.Code,        // Always the study plan subject code
+					NombreObjetivo:    materiaPlan.Name,        // Always the study plan subject name
+					Creditos:          materiaPlan.Credits,     // Always the study plan subject credits
+					TipologiaObjetivo: materiaPlan.Type,        // Always the study plan subject type
+					CodigoOrigen:      codigoOrigen,            // The origen subject that fulfills it
+					NombreOrigen:      nombreOrigen,            // The origen subject name
+					TipologiaOrigen:   tipologiaOrigen,         // The origen subject type
+					Equivalencia:      equivalenciaInfo,        // Equivalence info if applicable
+				}
 
-					// Actualizar créditos del componente
-					if materiaPlan.ComponenteAcademico != "" {
-						creditosPorComponente[materiaPlan.ComponenteAcademico] += materiaPlan.Credits
-					}
+				materiasHomologables = append(materiasHomologables, materiaHomologable)
+				totalCreditos += materiaPlan.Credits // Use study plan credits, not origen credits
+
+				// Update component credits
+				if materiaPlan.ComponenteAcademico != "" {
+					creditosPorComponente[materiaPlan.ComponenteAcademico] += materiaPlan.Credits
 				}
 			}
 		}
-		// Si no encontramos la materia en origen, no hacemos nada (no es homologable)
+		// If subject is not found in origen (directly or through equivalence), it cannot be homologated
 	}
 
-	// 6. Calcular resumen
+	// 6. Calculate summary
 	resumen := models.ResumenDobleTitulacion{
 		MateriasCursadasOrigen: len(materiasOrigen),
 		MateriasCursadasDoble:  len(materiasDoble),
@@ -1023,7 +1030,7 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 		CreditosHomologables:   totalCreditos,
 	}
 
-	// Calcular porcentaje de homologación
+	// Calculate homologation percentage
 	if planObjetivo.TotalCredits > 0 {
 		resumen.PorcentajeHomologacion = float64(totalCreditos) / float64(planObjetivo.TotalCredits) * 100
 	}
