@@ -917,112 +917,84 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 		materiasCursadasDoble[materia.Code] = materia
 	}
 
-	// 4.5. Crear mapa para controlar créditos por componente académico
+	// 4.5. Crear mapas para controlar créditos por componente académico
 	creditosPorComponente := make(map[string]int)
+	
+	// Get credit requirements by component type
+	creditosRequeridos := map[string]int{
+		"fund.obligatoria": planObjetivo.FundObligatoriaCredits,
+		"fund.optativa":    planObjetivo.FundOptativaCredits,
+		"dis.obligatoria":  planObjetivo.DisObligatoriaCredits,
+		"dis.optativa":     planObjetivo.DisOptativaCredits,
+		"libre":            planObjetivo.LibreCredits,
+	}
 
-	// 5. ONLY iterate through subjects that are actually in the study plan
+	// 5. Group subjects by component type for better processing
+	subjectsByComponent := make(map[string][]models.Subject)
+	for _, subject := range planObjetivo.Subjects {
+		componentKey := mapSubjectTypeToComponentKey(subject.Type)
+		subjectsByComponent[componentKey] = append(subjectsByComponent[componentKey], subject)
+	}
+
 	var materiasHomologables []models.MateriaHomologable
 	var warnings []models.Warning
 	totalCreditos := 0
 
-	for _, materiaPlan := range planObjetivo.Subjects {
-		// Check if this study plan subject can be homologated
-		var materiaOrigen *models.SubjectInput
-		var codigoOrigen string
-		var nombreOrigen string
-		var tipologiaOrigen string
-		var equivalenciaInfo *models.EquivalenceResult
-
-		// First, check direct match in origen
-		if materia, existe := materiasCursadasOrigen[materiaPlan.Code]; existe {
-			materiaOrigen = &materia
-			codigoOrigen = materia.Code
-			nombreOrigen = materia.Name
-			tipologiaOrigen = string(materia.Type)
+	// 6. Process each component type separately
+	for componentKey, subjects := range subjectsByComponent {
+		creditosRequeridosComponente := creditosRequeridos[componentKey]
+		creditosCompletadosComponente := 0
+		
+		// For obligatory subjects, all must be completed
+		if strings.Contains(componentKey, "obligatoria") {
+			for _, materiaPlan := range subjects {
+				if creditosCompletadosComponente >= creditosRequeridosComponente {
+					break // Component requirement already fulfilled
+				}
+				
+				homologable, warning := processSubjectForHomologation(
+					materiaPlan, materiasCursadasOrigen, materiasCursadasDoble, 
+					equivalenciaMap, true, // isObligatory = true
+				)
+				
+				if warning != nil {
+					warnings = append(warnings, *warning)
+				}
+				
+				if homologable != nil {
+					materiasHomologables = append(materiasHomologables, *homologable)
+					creditosCompletadosComponente += materiaPlan.Credits
+					totalCreditos += materiaPlan.Credits
+				}
+			}
 		} else {
-			// Check for equivalence: find if any subject in origen is equivalent to this study plan subject
-			for codigoOrig, codigoObj := range equivalenciaMap {
-				if codigoObj == materiaPlan.Code { // This origen subject is equivalent to our study plan subject
-					if materia, existe := materiasCursadasOrigen[codigoOrig]; existe {
-						materiaOrigen = &materia
-						codigoOrigen = materia.Code
-						nombreOrigen = materia.Name
-						tipologiaOrigen = string(materia.Type)
-						equivalenciaInfo = &models.EquivalenceResult{
-							Type:  "TOTAL",
-							Notes: fmt.Sprintf("Equivalencia: %s → %s", codigoOrig, materiaPlan.Code),
-						}
-						break
-					}
+			// For optional subjects, only process until credit requirement is met
+			for _, materiaPlan := range subjects {
+				if creditosCompletadosComponente >= creditosRequeridosComponente {
+					break // Component requirement already fulfilled
+				}
+				
+				homologable, warning := processSubjectForHomologation(
+					materiaPlan, materiasCursadasOrigen, materiasCursadasDoble, 
+					equivalenciaMap, false, // isObligatory = false
+				)
+				
+				if warning != nil {
+					warnings = append(warnings, *warning)
+				}
+				
+				if homologable != nil {
+					materiasHomologables = append(materiasHomologables, *homologable)
+					creditosCompletadosComponente += materiaPlan.Credits
+					totalCreditos += materiaPlan.Credits
 				}
 			}
 		}
-
-		// If we found the subject in origen (directly or through equivalence)
-		if materiaOrigen != nil {
-			// Check if it's already completed in double degree
-			yaCompletadaEnDoble := false
-			
-			// Direct check
-			if _, existe := materiasCursadasDoble[materiaPlan.Code]; existe {
-				yaCompletadaEnDoble = true
-			} else {
-				// Check through equivalence
-				for codigoOrig, codigoObj := range equivalenciaMap {
-					if codigoObj == materiaPlan.Code {
-						if _, existe := materiasCursadasDoble[codigoOrig]; existe {
-							yaCompletadaEnDoble = true
-							break
-						}
-					}
-				}
-			}
-
-			if !yaCompletadaEnDoble {
-				// Subject is in origen but not in double degree - generate warning
-				warnings = append(warnings, models.Warning{
-					Type:        "MATERIA_REQUIERE_HOMOLOGACION",
-					Message:     fmt.Sprintf("La materia '%s' (%s) está en la historia origen pero no en la doble titulación, requiere homologación", materiaPlan.Name, materiaPlan.Code),
-					SubjectCode: materiaPlan.Code,
-					SubjectName: materiaPlan.Name,
-				})
-			} else {
-				// Check if the academic component already has enough credits
-				if materiaPlan.ComponenteAcademico != "" {
-					creditosActuales := creditosPorComponente[materiaPlan.ComponenteAcademico]
-					creditosRequeridos := getCreditosRequeridosPorComponente(planObjetivo, materiaPlan.ComponenteAcademico)
-					
-					if creditosActuales >= creditosRequeridos {
-						// Component already has enough credits, don't homologate
-						continue
-					}
-				}
-
-				// This study plan subject can be homologated
-				materiaHomologable := models.MateriaHomologable{
-					CodigoObjetivo:    materiaPlan.Code,        // Always the study plan subject code
-					NombreObjetivo:    materiaPlan.Name,        // Always the study plan subject name
-					Creditos:          materiaPlan.Credits,     // Always the study plan subject credits
-					TipologiaObjetivo: materiaPlan.Type,        // Always the study plan subject type
-					CodigoOrigen:      codigoOrigen,            // The origen subject that fulfills it
-					NombreOrigen:      nombreOrigen,            // The origen subject name
-					TipologiaOrigen:   tipologiaOrigen,         // The origen subject type
-					Equivalencia:      equivalenciaInfo,        // Equivalence info if applicable
-				}
-
-				materiasHomologables = append(materiasHomologables, materiaHomologable)
-				totalCreditos += materiaPlan.Credits // Use study plan credits, not origen credits
-
-				// Update component credits
-				if materiaPlan.ComponenteAcademico != "" {
-					creditosPorComponente[materiaPlan.ComponenteAcademico] += materiaPlan.Credits
-				}
-			}
-		}
-		// If subject is not found in origen (directly or through equivalence), it cannot be homologated
+		
+		creditosPorComponente[componentKey] = creditosCompletadosComponente
 	}
 
-	// 6. Calculate summary
+	// 7. Calculate summary based on REQUIRED credits, not all possible subjects
 	resumen := models.ResumenDobleTitulacion{
 		MateriasCursadasOrigen: len(materiasOrigen),
 		MateriasCursadasDoble:  len(materiasDoble),
@@ -1030,9 +1002,13 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 		CreditosHomologables:   totalCreditos,
 	}
 
-	// Calculate homologation percentage
-	if planObjetivo.TotalCredits > 0 {
-		resumen.PorcentajeHomologacion = float64(totalCreditos) / float64(planObjetivo.TotalCredits) * 100
+	// Calculate homologation percentage based on TOTAL REQUIRED credits
+	totalCreditosRequeridos := planObjetivo.FundObligatoriaCredits + planObjetivo.FundOptativaCredits + 
+							   planObjetivo.DisObligatoriaCredits + planObjetivo.DisOptativaCredits + 
+							   planObjetivo.LibreCredits
+	
+	if totalCreditosRequeridos > 0 {
+		resumen.PorcentajeHomologacion = float64(totalCreditos) / float64(totalCreditosRequeridos) * 100
 	}
 
 	return &models.DobleTitulacionResult{
@@ -1044,6 +1020,124 @@ func CompareDobleTitulacion(db *gorm.DB, historiaOrigen, historiaDoble, codigoCa
 	}, nil
 }
 
+// Helper function to map subject type to component key
+func mapSubjectTypeToComponentKey(subjectType string) string {
+	typeKey := strings.ToLower(strings.ReplaceAll(string(subjectType), " ", "."))
+	
+	switch {
+	case strings.Contains(typeKey, "fund") && strings.Contains(typeKey, "obligatoria"):
+		return "fund.obligatoria"
+	case strings.Contains(typeKey, "fund") && strings.Contains(typeKey, "optativa"):
+		return "fund.optativa"
+	case strings.Contains(typeKey, "disciplinar") && strings.Contains(typeKey, "obligatoria"):
+		return "dis.obligatoria"
+	case strings.Contains(typeKey, "disciplinar") && strings.Contains(typeKey, "optativa"):
+		return "dis.optativa"
+	case strings.Contains(typeKey, "libre"):
+		return "libre"
+	default:
+		return "libre" // fallback
+	}
+}
+
+// Helper function to process individual subject for homologation
+func processSubjectForHomologation(
+	materiaPlan models.Subject,
+	materiasCursadasOrigen map[string]models.SubjectInput,
+	materiasCursadasDoble map[string]models.SubjectInput,
+	equivalenciaMap map[string]string,
+	isObligatory bool,
+) (*models.MateriaHomologable, *models.Warning) {
+	
+	var materiaOrigen *models.SubjectInput
+	var codigoOrigen string
+	var nombreOrigen string
+	var tipologiaOrigen string
+	var equivalenciaInfo *models.EquivalenceResult
+
+	// Check direct match in origen
+	if materia, existe := materiasCursadasOrigen[materiaPlan.Code]; existe {
+		materiaOrigen = &materia
+		codigoOrigen = materia.Code
+		nombreOrigen = materia.Name
+		tipologiaOrigen = string(materia.Type)
+	} else {
+		// Check for equivalence
+		for codigoOrig, codigoObj := range equivalenciaMap {
+			if codigoObj == materiaPlan.Code {
+				if materia, existe := materiasCursadasOrigen[codigoOrig]; existe {
+					materiaOrigen = &materia
+					codigoOrigen = materia.Code
+					nombreOrigen = materia.Name
+					tipologiaOrigen = string(materia.Type)
+					equivalenciaInfo = &models.EquivalenceResult{
+						Type:  "TOTAL",
+						Notes: fmt.Sprintf("Equivalencia: %s → %s", codigoOrig, materiaPlan.Code),
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// If subject not found in origen, return nil (cannot be homologated)
+	if materiaOrigen == nil {
+		// Only generate warning for obligatory subjects
+		if isObligatory {
+			warning := &models.Warning{
+				Type:        "MATERIA_OBLIGATORIA_FALTANTE",
+				Message:     fmt.Sprintf("La materia obligatoria '%s' (%s) no está en la historia origen", materiaPlan.Name, materiaPlan.Code),
+				SubjectCode: materiaPlan.Code,
+				SubjectName: materiaPlan.Name,
+			}
+			return nil, warning
+		}
+		return nil, nil
+	}
+
+	// Check if already completed in double degree
+	yaCompletadaEnDoble := false
+	
+	// Direct check
+	if _, existe := materiasCursadasDoble[materiaPlan.Code]; existe {
+		yaCompletadaEnDoble = true
+	} else {
+		// Check through equivalence
+		for codigoOrig, codigoObj := range equivalenciaMap {
+			if codigoObj == materiaPlan.Code {
+				if _, existe := materiasCursadasDoble[codigoOrig]; existe {
+					yaCompletadaEnDoble = true
+					break
+				}
+			}
+		}
+	}
+
+	if !yaCompletadaEnDoble {
+		// Subject is in origen but not in double degree - generate warning
+		warning := &models.Warning{
+			Type:        "MATERIA_REQUIERE_HOMOLOGACION",
+			Message:     fmt.Sprintf("La materia '%s' (%s) está en la historia origen pero no en la doble titulación, requiere homologación", materiaPlan.Name, materiaPlan.Code),
+			SubjectCode: materiaPlan.Code,
+			SubjectName: materiaPlan.Name,
+		}
+		return nil, warning
+	}
+
+	// Subject can be homologated
+	homologable := &models.MateriaHomologable{
+		CodigoObjetivo:    materiaPlan.Code,
+		NombreObjetivo:    materiaPlan.Name,
+		Creditos:          materiaPlan.Credits,
+		TipologiaObjetivo: materiaPlan.Type,
+		CodigoOrigen:      codigoOrigen,
+		NombreOrigen:      nombreOrigen,
+		TipologiaOrigen:   tipologiaOrigen,
+		Equivalencia:      equivalenciaInfo,
+	}
+
+	return homologable, nil
+}
 // Función auxiliar para obtener créditos requeridos por componente
 func getCreditosRequeridosPorComponente(plan *models.StudyPlan, componente string) int {
 	// Implementar según tu modelo de datos
