@@ -113,15 +113,26 @@ type SubjectInput struct {
 	Semester    string            `json:"semester" binding:"required"` // Semestre en que se cursó
 }
 
+//Waring sirve para dar mensajes de inconsistencias en las comparaciones
+type Warning struct {
+    Type        string `json:"type"`
+    Message     string `json:"message"`
+    SubjectCode string `json:"subject_code,omitempty"`
+    SubjectName string `json:"subject_name,omitempty"`
+}
+
+
 // ComparisonResult representa el resultado de la comparación de planes
 // Este es un DTO y no se almacena en la base de datos
 type ComparisonResult struct {
-	EquivalentSubjects []SubjectResult `json:"equivalent_subjects"`
-	MissingSubjects    []SubjectResult `json:"missing_subjects"`
-	TotalCredits       int             `json:"total_credits"`
-	MissingCredits     int             `json:"missing_credits"`
-	CreditsSummary     CreditsSummary  `json:"credits_summary"`
+    EquivalentSubjects []SubjectResult `json:"equivalent_subjects"`
+    MissingSubjects    []SubjectResult `json:"missing_subjects"`
+    TotalCredits       int             `json:"total_credits"`
+    MissingCredits     int             `json:"missing_credits"`
+    CreditsSummary     CreditsSummary  `json:"credits_summary"`
+    Warnings           []Warning       `json:"warnings,omitempty"` // ADD THIS LINE
 }
+
 
 // SubjectResult representa una materia en el resultado de la comparación
 type SubjectResult struct {
@@ -166,10 +177,11 @@ type DobleTitulacionInput struct {
 
 // DobleTitulacionResult representa el resultado de la comparación de doble titulación
 type DobleTitulacionResult struct {
-	MateriasHomologables []MateriaHomologable `json:"materias_homologables"`
-	TotalMaterias        int                  `json:"total_materias"`
-	TotalCreditos        int                  `json:"total_creditos"`
-	Resumen              ResumenDobleTitulacion `json:"resumen"`
+    MateriasHomologables []MateriaHomologable   `json:"materias_homologables"`
+    TotalMaterias        int                    `json:"total_materias"`
+    TotalCreditos        int                    `json:"total_creditos"`
+    Resumen              ResumenDobleTitulacion `json:"resumen"`
+    Warnings             []Warning              `json:"warnings,omitempty"` // ADD THIS LINE
 }
 
 // MateriaHomologable representa una materia que se puede homologar en doble titulación
