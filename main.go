@@ -190,7 +190,12 @@ func main() {
 				"POST /api/careers - Crear nueva carrera",
 				"POST /api/study-plans - Crear nuevo plan de estudio",
 				"POST /api/subjects - Crear nueva materia",
-				"POST /api/complete-study-plan - Crear plan completo con materias",
+				"POST /api/complete-study-plan - Crear plan de estudio completo con materias",
+				
+				"GET /api/subjects - Obtener todas las asignaturas",
+				"GET /api/subjects/:id - Obtener asignatura por ID",
+				"PUT /api/subjects/:id/type - Cambiar tipología de asignatura",
+				"PUT /api/subjects/:id - Actualizar asignatura completa",
 				
 				"GET /api/equivalences - Obtener todas las equivalencias",
 				"GET /api/careers/:code/equivalences - Obtener equivalencias por carrera",
@@ -634,6 +639,14 @@ func main() {
 		
 		// Obtener todas las asignaturas
 		api.GET("/subjects", getAllSubjects)
+		
+		// ===== SUBJECTS CRUD ENDPOINTS =====
+		// Obtener asignatura por ID
+		api.GET("/subjects/:id", getSubjectByID)
+		// Actualizar tipología de asignatura (cambiar tipo)
+		api.PUT("/subjects/:id/type", updateSubjectType)
+		// Actualizar asignatura completa
+		api.PUT("/subjects/:id", updateSubject)
 		
 		// ===== EQUIVALENCES CRUD ENDPOINTS =====
 		// Obtener todas las equivalencias
@@ -2129,5 +2142,84 @@ func getAllSubjects(c *gin.Context) {
 	
 	c.JSON(http.StatusOK, gin.H{
 		"subjects": subjects,
+	})
+}
+
+// getSubjectByID obtiene una asignatura por ID
+func getSubjectByID(c *gin.Context) {
+	subjectID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de asignatura inválido"})
+		return
+	}
+	
+	var subject models.Subject
+	if err := config.DB.First(&subject, uint(subjectID)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Asignatura no encontrada: " + err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"subject": subject,
+	})
+}
+
+// updateSubjectType actualiza el tipo de una asignatura
+func updateSubjectType(c *gin.Context) {
+	subjectID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de asignatura inválido"})
+		return
+	}
+	
+	var req struct {
+		Type string `json:"type" binding:"required"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	subject, err := functions.UpdateSubjectType(config.DB, uint(subjectID), req.Type)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"subject": subject,
+	})
+}
+
+// updateSubject actualiza una asignatura completa
+func updateSubject(c *gin.Context) {
+	subjectID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de asignatura inválido"})
+		return
+	}
+	
+	var req struct {
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		Credits     int    `json:"credits"`
+		Description string `json:"description"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+	
+	subject, err := functions.UpdateSubject(config.DB, uint(subjectID), req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"subject": subject,
+		"message": "Asignatura actualizada exitosamente",
 	})
 }

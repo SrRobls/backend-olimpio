@@ -872,18 +872,117 @@ func UpdateSourceSubject(db *gorm.DB, equivalenceID uint, updates struct {
 
 // DeleteEquivalence elimina una equivalencia (pero NO elimina la materia de origen)
 func DeleteEquivalence(db *gorm.DB, equivalenceID uint) error {
-    // Verificar que la equivalencia existe
-    var equivalence models.Equivalence
-    if err := db.First(&equivalence, equivalenceID).Error; err != nil {
-        return errors.New("equivalence not found")
-    }
+	// Verificar que la equivalencia existe
+	var equivalence models.Equivalence
+	if err := db.First(&equivalence, equivalenceID).Error; err != nil {
+		return errors.New("equivalence not found")
+	}
 
-    // Eliminar solo la equivalencia
-    if err := db.Delete(&equivalence).Error; err != nil {
-        return errors.New("failed to delete equivalence: " + err.Error())
-    }
+	// Eliminar la equivalencia
+	if err := db.Delete(&equivalence).Error; err != nil {
+		return errors.New("failed to delete equivalence: " + err.Error())
+	}
 
-    return nil
+	return nil
+}
+
+// UpdateSubjectType actualiza la tipología de una asignatura basándose en su ID
+func UpdateSubjectType(db *gorm.DB, subjectID uint, newType string) (*models.Subject, error) {
+	// Validar que el tipo es válido
+	if !models.ValidarTipologia(newType) {
+		return nil, errors.New("invalid subject type. Must be one of: FUND. OBLIGATORIA, FUND. OPTATIVA, DISCIPLINAR OBLIGATORIA, DISCIPLINAR OPTATIVA, LIBRE ELECCIÓN, TRABAJO DE GRADO")
+	}
+
+	// Verificar que la asignatura existe
+	var subject models.Subject
+	if err := db.First(&subject, subjectID).Error; err != nil {
+		return nil, errors.New("subject not found")
+	}
+
+	// Almacenar el tipo anterior para logging
+	oldType := string(subject.Type)
+
+	// Actualizar el tipo
+	subject.Type = models.TipologiaAsignatura(newType)
+
+	// Guardar los cambios
+	if err := db.Save(&subject).Error; err != nil {
+		return nil, errors.New("failed to update subject type: " + err.Error())
+	}
+
+	// Log del cambio
+	fmt.Printf("[UPDATE SUBJECT TYPE] Asignatura %s (%s): %s → %s\n", 
+		subject.Code, subject.Name, oldType, newType)
+
+	return &subject, nil
+}
+
+// UpdateSubject actualiza una asignatura completa basándose en su ID
+func UpdateSubject(db *gorm.DB, subjectID uint, updates struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Credits     int    `json:"credits"`
+	Description string `json:"description"`
+}) (*models.Subject, error) {
+	// Verificar que la asignatura existe
+	var subject models.Subject
+	if err := db.First(&subject, subjectID).Error; err != nil {
+		return nil, errors.New("subject not found")
+	}
+
+	// Preparar campos a actualizar
+	updateFields := make(map[string]interface{})
+
+	if updates.Name != "" {
+		updateFields["name"] = updates.Name
+	}
+	
+	if updates.Type != "" {
+		if !models.ValidarTipologia(updates.Type) {
+			return nil, errors.New("invalid subject type. Must be one of: FUND. OBLIGATORIA, FUND. OPTATIVA, DISCIPLINAR OBLIGATORIA, DISCIPLINAR OPTATIVA, LIBRE ELECCIÓN, TRABAJO DE GRADO")
+		}
+		updateFields["type"] = models.TipologiaAsignatura(updates.Type)
+	}
+	
+	if updates.Credits > 0 {
+		updateFields["credits"] = updates.Credits
+	}
+	
+	if updates.Description != "" {
+		updateFields["description"] = updates.Description
+	}
+
+	// Actualizar solo si hay campos para actualizar
+	if len(updateFields) > 0 {
+		if err := db.Model(&subject).Updates(updateFields).Error; err != nil {
+			return nil, errors.New("failed to update subject: " + err.Error())
+		}
+	}
+
+	// Recargar la asignatura actualizada
+	if err := db.First(&subject, subjectID).Error; err != nil {
+		return nil, errors.New("failed to reload updated subject")
+	}
+
+	return &subject, nil
+}
+
+// GetSubjectByID obtiene una asignatura por su ID
+func GetSubjectByID(db *gorm.DB, subjectID uint) (*models.Subject, error) {
+	var subject models.Subject
+	if err := db.First(&subject, subjectID).Error; err != nil {
+		return nil, errors.New("subject not found")
+	}
+	return &subject, nil
+}
+
+// GetSubjectByCode obtiene una asignatura por su código
+func GetSubjectByCode(db *gorm.DB, code string) (*models.Subject, error) {
+	var subject models.Subject
+	if err := db.Where("code = ?", code).First(&subject).Error; err != nil {
+		return nil, errors.New("subject not found")
+	}
+	return &subject, nil
 }
 
 // GetEquivalencesBySubject obtiene todas las equivalencias donde una materia específica aparece
